@@ -32,9 +32,9 @@ jobs:
         run: ctest --test-dir build -L quick --output-on-failure
 
   macos:
-    name: Everything (macOS)
+    name: Build, Mac app and quick tests (macOS)
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Install SDL2
@@ -52,9 +52,8 @@ jobs:
         run: scripts/build_app.sh
       - name: Quick tests
         run: ctest --test-dir build -L quick --output-on-failure
-      # The network tests run real simulators and find them over Bonjour (mDNS) on the runner.
-      - name: Network tests
-        run: ctest --test-dir build -L network --output-on-failure
+      # The network tests (real simulators found over Bonjour) are not run here: on hosted macOS runners they did not
+      # finish. scripts/test_all.sh runs them.
 
   firmware:
     name: Firmware (PlatformIO)
