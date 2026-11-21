@@ -1,0 +1,25 @@
+# The C++ style.
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 120
+AccessModifierOffset: -4
+NamespaceIndentation: None
+FixNamespaceComments: true
+PointerAlignment: Left
+DerivePointerAlignment: false
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortLambdasOnASingleLine: All
+SpacesBeforeTrailingComments: 2
+IncludeBlocks: Merge
+SortIncludes: CaseSensitive
+IncludeCategories:
+  - Regex: '^<'
+    Priority: 1
+  - Regex: '.*'
+    Priority: 2

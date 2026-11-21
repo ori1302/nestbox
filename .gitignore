@@ -1,0 +1,25 @@
+# Build output
+/build/
+/build-*/
+firmware/esp32/.pio/
+firmware/esp32/data/*.egg
+
+# Pictures the tests, --shot and the studio tools write by default
+*.ppm
+layout.png
+workspot_preview.png
+sheet*.png
+out.gif
+
+# Python
+__pycache__/
+*.pyc
+
+# Editors and tools
+.vscode/
+.idea/
+.cache/
+compile_commands.json
+
+# macOS
+.DS_Store

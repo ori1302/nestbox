@@ -1,0 +1,269 @@
+import Foundation
+
+/// The app's state: the companion it supervises, the pet window it may run, the pets on the network, and what
+/// the pet in use reports. The menu and the windows call its methods.
+@MainActor
+final class Model {
+    private static let pollInterval: TimeInterval = 2
+
+    let prefs: Preferences
+    let paths: AppPaths
+    /// --device, or the `device` preference: the companion and the status use only this pet.
+    let deviceOverride: URL?
+    let log = EventLog()
+    let companion: CompanionSupervisor
+    let petWindow: PetWindowRunner
+    private let registry: ChildRegistry?
+    private let childEnvironment: [String: String]?
+
+    var onChange: (() -> Void)?
+
+    /// Other copies of the helper, not started by this app.
+    private(set) var otherCompanions: [pid_t] = []
+    private(set) var status: PetStatus?
+    private(set) var statusSource: URL?
+    private(set) var pets: [DevicePet] = []
+    private(set) var petOut: String?
+    private(set) var networkPets: [NetworkPet] = []
+    private(set) var isScanning = false
+    private var timer: Timer?
+    private let networkWatch = NetworkWatch()
+
+    /// `childrenFile` records running children for cleanup after a crash; `childHome` sets HOME for the helper
+    /// processes (where they keep ~/.nestbox/device).
+    init(prefs: Preferences, paths: AppPaths, device: URL?, name: String?, simulatorArguments: [String],
+         childrenFile: URL?, childHome: String? = nil) {
+        self.prefs = prefs
+        self.paths = paths
+        deviceOverride = device
+        registry = childrenFile.map(ChildRegistry.init)
+        childEnvironment = childHome.map { ProcessInfo.processInfo.environment.merging(["HOME": $0]) { $1 } }
+        companion = CompanionSupervisor(helper: paths.helper, prefs: prefs, deviceOverride: device, nameOverride: name,
+                                        environment: childEnvironment, log: log)
+        petWindow = PetWindowRunner(executable: paths.simulator, arguments: simulatorArguments)
+        petWindow.screen = prefs.petScreen
+        companion.onChange = { [weak self] in self?.onChange?() }
+        companion.onChildrenChanged = { [weak self] in self?.saveChildren() }
+        petWindow.onChange = { [weak self] in self?.onChange?() }
+        petWindow.onChildrenChanged = { [weak self] in self?.saveChildren() }
+    }
+
+    /// The pet the status and the menus talk to: the one the companion found, else the pet window.
+    var petURL: URL? { deviceOverride ?? companion.petURL ?? petWindow.url }
+
+    func begin() {
+        registry?.stopLeftovers()
+        companion.start()
+        loadPetScreens()
+        let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }    // the timer runs on the main run loop
+        }
+        RunLoop.main.add(timer, forMode: .common)    // .common keeps it firing while the menu is open
+        self.timer = timer
+        networkWatch.onChange = { [weak self] in
+            self?.companion.reachAgain()
+            self?.scanNetwork()
+            self?.tick()
+        }
+        networkWatch.start()
+        tick()
+    }
+
+    func tick() {
+        let ours = companion.process?.pid
+        otherCompanions = ProcessTable.pids(runningExecutableAt: paths.helper.path).filter { $0 != ours }
+        pollStatus()
+        onChange?()
+    }
+
+    func setSignal(_ signal: ActivitySignal, enabled: Bool) {
+        prefs.setEnabled(signal, enabled)
+        log.append("-- \(signal.title) \(enabled ? "on" : "off"): restarting the companion")
+        companion.restart()
+    }
+
+    /// Quitting: stops both children and waits for them, so the record of running children is empty and true.
+    func stopAll() {
+        companion.stopAndWait()
+        petWindow.stopAndWait()
+        timer?.invalidate()
+        networkWatch.stop()
+        saveChildren()
+    }
+
+    private func saveChildren() {
+        registry?.save([companion.process, petWindow.process].compactMap { $0 })
+    }
+
+    // MARK: - Pets on the network and pairing
+
+    func scanNetwork(completion: (() -> Void)? = nil) {
+        guard !isScanning, deviceOverride == nil else {
+            completion?()
+            return
+        }
+        isScanning = true
+        let helper = paths.helper, environment = childEnvironment
+        Task {
+            let pets = await Task.detached { NetworkPet.scan(helper: helper, environment: environment) }.value
+            networkPets = pets
+            isScanning = false
+            onChange?()
+            completion?()
+        }
+    }
+
+    func isPaired(_ pet: NetworkPet) -> Bool { prefs.pairedID == pet.id }
+
+    /// `nestbox pair` is running: the pet waits for its button.
+    private(set) var isGettingKey = false
+
+    /// Gets the pet's key: the pet asks the user, who presses its button. Completes with whether it worked and why
+    /// not.
+    func getKey(completion: @escaping (Bool, String) -> Void) {
+        guard !isGettingKey else {
+            completion(false, "pairing is already waiting for the pet's button")
+            return
+        }
+        guard let device = petURL else {
+            completion(false, "no pet found yet")
+            return
+        }
+        isGettingKey = true
+        onChange?()
+        let helper = paths.helper, environment = childEnvironment
+        Task {
+            let result = await Task.detached {
+                Pairing.run(helper: helper, device: device, environment: environment)
+            }.value
+            isGettingKey = false
+            log.append("-- pairing: \(result.paired ? "done" : result.detail)")
+            onChange?()
+            completion(result.paired, result.detail)
+        }
+    }
+
+    /// A pet's name as it calls itself (its title), from its id; the id when the list hasn't come yet.
+    func title(of id: String) -> String { pets.first { $0.id == id }?.name ?? id }
+
+    /// Several devices are on the network and none is paired yet.
+    var needsPick: Bool {
+        !prefs.hasPairing && networkPets.filter { !$0.isSimulator }.count > 1
+    }
+
+    /// A pet without an id can't be told apart from others later, so it isn't paired.
+    func pair(_ pet: NetworkPet) {
+        guard !pet.id.isEmpty else { return }
+        prefs.pairedID = pet.id
+        companion.forgetPet()
+        log.append("-- paired with \(pet.name) (id \(pet.id)): restarting the companion")
+        companion.restart()
+    }
+
+    // MARK: - The pet window
+
+    func togglePetWindow() {
+        if petWindow.isRunning {
+            petWindow.stop()
+            saveChildren()
+            onChange?()
+        } else {
+            petWindow.start()
+        }
+    }
+
+    /// The screens the pet window can be, once the simulator has listed them.
+    private(set) var petScreens: [PetScreen] = []
+
+    func loadPetScreens() {
+        guard let simulator = paths.simulator else { return }
+        Task {
+            petScreens = await Task.detached { PetScreen.list(simulator: simulator) }.value
+            onChange?()
+        }
+    }
+
+    /// The screen in use: the chosen one, else the simulator's default (listed first).
+    var petScreen: String? { petWindow.screen ?? petScreens.first?.id }
+
+    /// Shows the pet on another screen; a running pet window starts again on it.
+    func setPetScreen(_ id: String) {
+        guard id != petScreen else { return }
+        prefs.petScreen = id
+        petWindow.screen = id
+        log.append("-- pet window screen: \(id)")
+        if petWindow.isRunning {
+            petWindow.stopAndWait()
+            petWindow.start()
+        }
+        onChange?()
+    }
+
+    // MARK: - The pet's own state
+
+    func pollStatus() {
+        guard let base = petURL else {
+            status = nil
+            return
+        }
+        PetClient.get(PetStatus.self, "/v1", from: base) { [weak self] status in
+            guard let self else { return }
+            self.status = status
+            self.statusSource = base
+            if let pet = status?.pet, let match = self.pets.first(where: { $0.id == pet }) {
+                self.petOut = match.id
+            }
+            self.onChange?()
+        }
+    }
+
+    /// Fetched when the menu opens rather than polled: GET /v1/pets makes the pet rescan its eggs.
+    func fetchPets(completion: (() -> Void)? = nil) {
+        guard let base = petURL else {
+            pets = []
+            completion?()
+            return
+        }
+        PetClient.get(PetList.self, "/v1/pets", from: base) { [weak self] list in
+            guard let self else { return }
+            self.pets = list?.pets ?? []
+            if let list { self.petOut = list.current }
+            self.onChange?()
+            completion?()
+        }
+    }
+
+    func bringOut(_ id: String, completion: ((Int) -> Void)? = nil) {
+        guard let base = petURL else {
+            completion?(0)
+            return
+        }
+        PetClient.post(PetChoice(pet: id), "/v1", to: base) { [weak self] status, _ in
+            if status == HTTPStatus.ok { self?.petOut = id }
+            self?.pollStatus()
+            self?.onChange?()
+            completion?(status)
+        }
+    }
+
+    /// Asks the pet to forget its Wi-Fi; completes with the HTTP status (0: no answer).
+    func forgetWiFi(completion: @escaping (Int) -> Void) {
+        guard let base = petURL else {
+            completion(0)
+            return
+        }
+        PetClient.post(ForgetWiFi(), "/v1", to: base) { status, _ in completion(status) }
+    }
+
+    func send(_ test: QuickTest, completion: ((Int, MessageReply?) -> Void)? = nil) {
+        guard let base = petURL else {
+            completion?(0, nil)
+            return
+        }
+        PetClient.post(test.message, to: base) { [weak self] status, reply in
+            self?.log.append("-- quick test \(test.title): \(status)")
+            self?.pollStatus()
+            completion?(status, reply)
+        }
+    }
+}

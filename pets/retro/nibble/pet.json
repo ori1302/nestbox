@@ -1,0 +1,217 @@
+{
+  "name": "Nibble",
+  "credit": "NestBox",
+  "license": "CC BY 4.0",
+  "color": "#f4f1e4",
+  "scale": 2,
+  "theme": "A white farm goose on a Swiss mountain farm: snowy peaks, pines, a koi pond, a scarecrow and a little vegetable garden",
+  "personality": "Curious, a bit proud, famously grumpy: it hisses with its neck low when annoyed",
+  "style": "Pixel art drawn from a small 3D model, shown at 2x, turning to 8 directions",
+  "about": "It works on a laptop on an old tree stump by the pond.",
+  "notes": {
+    "Party": "jumps high, wings flapping, head thrown side to side",
+    "Dance": "bounces and flaps, head swinging (dance, celebrate)",
+    "RearUp": "the goose hiss: neck low and forward, wings spread (grumpy)",
+    "Attack": "charges sideways, honking, wings out (fight)",
+    "Eat": "pecks at the grass (eat)",
+    "Sit": "sits down quietly in the grass (quiet)",
+    "Down": "slumped in the grass, head hanging (something stays broken)",
+    "Pose": "wings wide open, head high (done)",
+    "Petted": "nuzzles, eyes happily shut",
+    "Confused": "tilts its head one way, then the other",
+    "Charge": "a tense little tremble (busy)",
+    "WorkFast": "pecks at the laptop, wings busy, facing you (type_fast)",
+    "Sleep": "sits with its head tucked on its back",
+    "Alert": "neck stretched up, wings half out (needs you)",
+    "Flick": "dips to the grass for a pebble, then flicks it into the pond (throw)"
+  },
+  "throw": {
+    "anim": "Flick",
+    "item": "Pebble",
+    "flight": "splash",
+    "typing_fast": false,
+    "plays": true
+  },
+  "scene": {
+    "background": "meadow.png",
+    "night": "meadow_night.png",
+    "keep": [120, 100, 292, 238],
+    "target": [266, 196],
+    "floor": [
+      [124, 108],
+      [296, 108],
+      [312, 114],
+      [312, 136],
+      [296, 138],
+      [237, 142],
+      [229, 150],
+      [225, 158],
+      [219, 166],
+      [211, 174],
+      [209, 182],
+      [208, 190],
+      [201, 198],
+      [191, 206],
+      [183, 214],
+      [179, 222],
+      [180, 230],
+      [182, 236],
+      [10, 236],
+      [10, 192],
+      [28, 188],
+      [80, 180],
+      [124, 168]
+    ],
+    "home": [164, 204],
+    "workspot": {
+      "at": [168, 118],
+      "on": "workspot_on.png",
+      "off": "workspot_off.png",
+      "night": "workspot_night.png"
+    },
+    "ambient": [
+      {
+        "at": [76, 66],
+        "frames": 6,
+        "durations": 8,
+        "day": "flag.png",
+        "night": "flag_night.png"
+      },
+      {
+        "name": "crow",
+        "cue": "once",
+        "at": [40, 20],
+        "frames": 63,
+        "durations": 6,
+        "day": "crow.png"
+      },
+      {
+        "name": "koi",
+        "cue": "once",
+        "at": [234, 176],
+        "frames": 36,
+        "durations": 6,
+        "day": "koi.png"
+      },
+      {
+        "name": "moo",
+        "cue": "once",
+        "at": [168, 56],
+        "frames": 39,
+        "durations": 6,
+        "day": "moo.png"
+      }
+    ]
+  },
+  "free_time": [
+    {
+      "name": "shooing the crow",
+      "hours": [7, 18],
+      "steps": [
+        {
+          "at": [45.27, 75],
+          "do": "Idle",
+          "face": "left",
+          "for": 0.6
+        },
+        {
+          "do": "Attack",
+          "face": "left",
+          "show": "crow"
+        },
+        {
+          "do": "Pose",
+          "show": "crow"
+        },
+        {
+          "do": "Idle",
+          "face": "left",
+          "for": 4,
+          "show": "crow"
+        }
+      ]
+    },
+    {
+      "name": "watching the koi",
+      "hours": [7, 18],
+      "steps": [
+        {
+          "at": [64.0, 73],
+          "do": "Idle",
+          "face": "right",
+          "for": 0.4
+        },
+        {
+          "do": "Idle",
+          "face": "right",
+          "for": 2,
+          "show": "koi"
+        },
+        {
+          "do": "Hop",
+          "show": "koi"
+        },
+        {
+          "do": "Idle",
+          "face": "right",
+          "for": 1.5,
+          "show": "koi"
+        }
+      ]
+    },
+    {
+      "name": "honking at the cows",
+      "hours": [7, 18],
+      "steps": [
+        {
+          "at": [46.24, 49],
+          "do": "Idle",
+          "face": "back-right",
+          "for": 0.6
+        },
+        {
+          "do": "Idle",
+          "face": "back-right",
+          "for": 1.2,
+          "say": "HONK!",
+          "show": "moo"
+        },
+        {
+          "do": "Idle",
+          "face": "back-right",
+          "for": 2.6,
+          "show": "moo"
+        },
+        {
+          "do": "Confused"
+        }
+      ]
+    },
+    {
+      "name": "grazing",
+      "steps": [
+        {
+          "at": [51.75, 82],
+          "do": "Eat",
+          "times": 3
+        },
+        {
+          "at": [32.5, 90],
+          "do": "Eat",
+          "times": 2
+        }
+      ]
+    },
+    {
+      "name": "a nap in the sun",
+      "hours": [12, 17],
+      "steps": [
+        {
+          "do": "sleep",
+          "at": [54.37, 85],
+          "for": 30
+        }
+      ]
+    }
+  ]
+}

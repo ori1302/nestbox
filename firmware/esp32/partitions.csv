@@ -1,0 +1,10 @@
+# 16 MB flash: two 3 MB OTA app slots, 7.9 MB of eggs (LittleFS; the Arduino driver mounts the label "spiffs"),
+# and the 2 MB read-only USB drive (NESTBOX: the Mac app and a README; subtype 0x40, a raw FAT image).
+# Name,   Type, SubType,  Offset,   Size
+nvs,      data, nvs,      0x9000,   0x5000
+otadata,  data, ota,      0xe000,   0x2000
+app0,     app,  ota_0,    0x10000,  0x300000
+app1,     app,  ota_1,    0x310000, 0x300000
+spiffs,   data, spiffs,   0x610000, 0x7E0000
+drive,    data, 0x40,     0xDF0000, 0x200000
+coredump, data, coredump, 0xFF0000, 0x10000

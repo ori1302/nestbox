@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>NestBox</string>
+	<key>CFBundleDisplayName</key>
+	<string>NestBox</string>
+	<key>CFBundleIdentifier</key>
+	<string>pet.nestbox.menubar</string>
+	<key>CFBundleExecutable</key>
+	<string>NestBox</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>set by scripts/build_app.sh</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>set by scripts/build_app.sh</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- The pet is a device on the local network: plain HTTP to it, and Bonjour to find it (the companion
+	     runs as this app's child, so macOS asks on the app's behalf). -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>NestBox finds your pet and talks to it on your local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_nestbox._tcp</string>
+	</array>
+</dict>
+</plist>
