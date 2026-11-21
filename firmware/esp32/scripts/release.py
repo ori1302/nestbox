@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Builds the files a browser installer writes to a board, and a manifest.json that lists them:
 
-    python3 scripts/release.py OUT_DIR [--pets "nibble kitchen-cat"] [--eggs DIR]
+    python3 scripts/release.py OUT_DIR [--env nestbox-2in] [--pets "nibble kitchen-cat"] [--eggs DIR]
 
-It runs `pio run` (the firmware and the USB drive image) and `pio run -t buildfs` (the pets), then copies into OUT_DIR
+For one board (`--env`, a PlatformIO environment: the LCD-1.69 by default) it runs `pio run` (the firmware and the
+USB drive image) and `pio run -t buildfs` (the pets), then copies into OUT_DIR
 the bootloader, the partition table, the OTA selector, the firmware, the pets image and the drive image, each with
 the flash address it goes to and its SHA-256. The nvs partition (Wi-Fi, the key, the name) is not among them, so a
 reinstall keeps the board's settings.
@@ -22,7 +23,12 @@ import sys
 
 from project import PROJECT, default_pets, egg_description, partitions, version
 
-BUILD = os.path.join(PROJECT, ".pio", "build", "nestbox")
+# The boards a release can be built for: PlatformIO environment, and the board it runs on.
+BOARDS = {
+    "nestbox": "Waveshare ESP32-S3-LCD-1.69",
+    "nestbox-v1": "Waveshare ESP32-S3-LCD-1.69, first revision (no V2 sticker)",
+    "nestbox-2in": "Waveshare ESP32-S3-LCD-2",
+}
 BOOTLOADER_OFFSET = 0x0          # ESP32-S3
 PARTITION_TABLE_OFFSET = 0x8000
 BOOT_APP0 = os.path.expanduser("~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin")
@@ -43,18 +49,21 @@ def sha256(path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("out")
+    ap.add_argument("--env", default="nestbox", choices=sorted(BOARDS),
+                    help="the board: its PlatformIO environment (default: nestbox, the LCD-1.69)")
     ap.add_argument("--pets", default=" ".join(default_pets()),
                     help='the pets (default: custom_pets in platformio.ini)')
     ap.add_argument("--eggs", help="a folder of eggs to take pets from first")
     args = ap.parse_args()
     pets = args.pets.replace(",", " ").split()
+    build = os.path.join(PROJECT, ".pio", "build", args.env)
 
     env = dict(os.environ, NESTBOX_PETS=" ".join(pets))
     env.pop("NESTBOX_INCLUDE_PRIVATE", None)          # a release only ever holds pets that may be shared
     if args.eggs:
         env["NESTBOX_EGGS"] = os.path.expanduser(args.eggs)
     for target in ([], ["-t", "buildfs"]):
-        r = subprocess.run([pio(), "run", "-e", "nestbox", *target], cwd=PROJECT, env=env, capture_output=True,
+        r = subprocess.run([pio(), "run", "-e", args.env, *target], cwd=PROJECT, env=env, capture_output=True,
                            text=True)
         for line in r.stdout.splitlines():
             if line.startswith("nestbox:"):
@@ -73,12 +82,12 @@ def main():
     if not os.path.exists(BOOT_APP0):
         sys.exit("release: no boot_app0.bin in the Arduino framework package")
     parts = [
-        ("bootloader", os.path.join(BUILD, "bootloader.bin"), BOOTLOADER_OFFSET),
-        ("partition table", os.path.join(BUILD, "partitions.bin"), PARTITION_TABLE_OFFSET),
+        ("bootloader", os.path.join(build, "bootloader.bin"), BOOTLOADER_OFFSET),
+        ("partition table", os.path.join(build, "partitions.bin"), PARTITION_TABLE_OFFSET),
         ("OTA selector", BOOT_APP0, table["otadata"]),
-        ("firmware", os.path.join(BUILD, "firmware.bin"), table["app0"]),
-        ("pets", os.path.join(BUILD, "littlefs.bin"), table["spiffs"]),
-        ("USB drive", os.path.join(BUILD, "drive.img"), table["drive"]),
+        ("firmware", os.path.join(build, "firmware.bin"), table["app0"]),
+        ("pets", os.path.join(build, "littlefs.bin"), table["spiffs"]),
+        ("USB drive", os.path.join(build, "drive.img"), table["drive"]),
     ]
     files = []
     for what, src, offset in parts:
@@ -90,14 +99,16 @@ def main():
     for p in pets:
         desc = egg_description(os.path.join(data, p + ".egg"))
         pet_list.append({"name": p, "title": desc.get("name", p), "license": desc.get("license", "")})
-    manifest = {"name": "NestBox", "version": ".".join(version()), "chip": "ESP32-S3", "flash": "16MB",
+    manifest = {"name": "NestBox", "version": ".".join(version()), "board": BOARDS[args.env], "env": args.env,
+                "chip": "ESP32-S3", "flash": "16MB",
                 "pets": pet_list, "parts": files}
     with open(os.path.join(args.out, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
     total = sum(p["size"] for p in files)
-    print("release: NestBox %s with %s, %d files, %.1f MB, in %s" % (
-        manifest["version"], ", ".join(p["title"] for p in pet_list), len(files), total / 1048576, args.out))
+    print("release: NestBox %s for the %s with %s, %d files, %.1f MB, in %s" % (
+        manifest["version"], manifest["board"], ", ".join(p["title"] for p in pet_list), len(files), total / 1048576,
+        args.out))
 
 
 if __name__ == "__main__":
