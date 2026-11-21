@@ -79,8 +79,10 @@ try:
     studio = lambda *a: subprocess.run([sys.executable, os.path.join(STUDIO, 'studio.py'), *a], capture_output=True,
                                        text=True)
     r = studio('layout', NIBBLE, '-o', os.path.join(work, 'layout.png'))
-    check(r.returncode == 0 and Image.open(os.path.join(work, 'layout.png')).width == 280 * 3,
-          'layout draws Nibble\'s scene with its floor and spots')
+    with open(os.path.join(NIBBLE, 'pet.json')) as f:
+        scene_width = Image.open(os.path.join(NIBBLE, json.load(f)['scene']['background'])).width
+    check(r.returncode == 0 and Image.open(os.path.join(work, 'layout.png')).width == scene_width * 3,
+          'layout draws Nibble\'s scene with its floor and spots, three times its size')
     r = studio('layout', os.path.join(NIBBLE, json.load(open(os.path.join(NIBBLE, 'pet.json')))['scene']['background']),
                '-o', os.path.join(work, 'grid.png'))
     check(r.returncode == 0, 'layout draws a grid over a bare picture too')
