@@ -4,7 +4,8 @@
 
 NestBox is a small LCD that sits next to your computer, with a pixel pet living on it. The pet works at its desk
 while you type, watches while a coding agent works, calls you when the agent needs an answer, celebrates a passing
-build, and goes to bed when the computer sleeps. Anything on your network can drive it with one HTTP request.
+build, and goes to bed when the computer sleeps. Anything on your network can drive it with one HTTP request, and
+anything on the internet through the optional [webhook relay](https://nestbox.pet/docs/webhooks/).
 
 It runs on a Waveshare ESP32-S3-LCD-1.69 or ESP32-S3-LCD-2 board. The same C++ engine runs in a Mac simulator that
 serves the same HTTP API, so everything here can be tried without the hardware.
@@ -78,6 +79,13 @@ the privacy rules. Ask an agent to read `http://<device>.local/agents` and conne
 `integrations/claude-code/` is a ready-made set of Claude Code hooks
 ([Claude Code](https://nestbox.pet/docs/claude-code/)).
 
+## On your Mac
+
+The menu bar app (`companion/mac/app/`) runs the companion for you, and its menu adds three things: **Music** (the pet
+dances to what Spotify or Apple Music plays), **Calendar** (a countdown before a meeting, quiet during it) and
+**Webhooks** (a public URL for your pet, through the NestBox relay). See [Mac app](https://nestbox.pet/docs/mac-app/)
+and [Webhooks](https://nestbox.pet/docs/webhooks/).
+
 ## Repository layout
 
 | Path | Contents |
@@ -87,6 +95,7 @@ the privacy rules. Ask an agent to read `http://<device>.local/agents` and conne
 | `simulator/` | The Mac simulator: SDL window, HTTP server, Bonjour, a fake Wi-Fi radio for setup |
 | `companion/mac/` | `cli/`: the `nestbox` command; `app/`: the menu bar app; `selftest/`: the app's self-test |
 | `integrations/` | Example Claude Code hooks |
+| `.github/` | `ci.yml` (the tests on Linux and macOS) and `stars.yml` (a new star makes the owner's pet celebrate, through its webhook) |
 | `pets/` | The eggs the firmware installs; `retro/` holds Nibble (with the folder it is packed from) and Slime |
 | `tools/` | `eggpack/` (folder to egg), `studio/` and `petrecord.cpp` (a pet frame by frame), `docgen.cpp` (what the engine serves, for the packer and the docs), `demo_gif.py`, `fontgen.py`, `tzdata.py` |
 | `scripts/` | `build.sh` (everything), `test_all.sh`, and the scripts that build, self-test and package the menu bar app |
