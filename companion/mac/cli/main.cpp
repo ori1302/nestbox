@@ -1,10 +1,11 @@
 // nestbox: the Mac companion for the NestBox desk pet.
 //
 //   nestbox [--device URL] [--id ID] [--name NAME] [--print] [--machine] [--no-keys] [--no-idle] [--no-lock]
+//          [--music]
 //       Reports the Mac's activity to the pet (see activity.h). It finds the pet by Bonjour: --id picks the
 //       paired pet by its TXT id at its current address (default: the id in ~/.nestbox/device), --name by Bonjour
 //       instance name; --device uses one fixed URL instead. --print echoes each body with the pet's reply;
-//       --machine adds tagged JSON lines for the Mac app.
+//       --machine adds tagged JSON lines for the Mac app. --music also tells it what Spotify or Apple Music plays.
 //   nestbox pair [--device URL] [--machine]   gets the pet's key; confirm with its button (see commands.h)
 //   nestbox find [--machine] [NAME]   lists pets on the network
 #include <csignal>
@@ -20,11 +21,12 @@ namespace {
 
 constexpr const char* USAGE =
     "usage: nestbox [--device URL] [--id ID] [--name NAME] [--print] [--machine] [--no-keys] [--no-idle] "
-    "[--no-lock] | pair [--device URL] [--machine] | find [--machine] [NAME]\n";
+    "[--no-lock] [--music] | pair [--device URL] [--machine] | find [--machine] [NAME]\n";
 
 bool parse_options(const std::vector<std::string>& args, companion::CompanionOptions& o) {
     const std::map<std::string, bool companion::CompanionOptions::*> switches = {
-        {"--print", &companion::CompanionOptions::print}, {"--machine", &companion::CompanionOptions::machine}};
+        {"--print", &companion::CompanionOptions::print}, {"--machine", &companion::CompanionOptions::machine},
+        {"--music", &companion::CompanionOptions::music}};
     const std::map<std::string, bool companion::CompanionOptions::*> signals_off = {
         {"--no-keys", &companion::CompanionOptions::keys}, {"--no-idle", &companion::CompanionOptions::idle},
         {"--no-lock", &companion::CompanionOptions::lock}};

@@ -11,8 +11,11 @@
 //   next    the next report comes within this many seconds
 // The stream doubles as a heartbeat: when the Mac sleeps it stops, and after twice `next` the pet sleeps too.
 //
+// With --music it also tells the pet what Spotify or Apple Music plays (see music.h), as the note `music`: the song
+// and artist as its line and how far into the song as its gauge, while the pet dances. Pausing ends the note.
+//
 // With --machine it also prints, for the Mac app (companion/mac/app/HelperEvent.swift), one JSON object per line
-// after MACHINE_TAG: {"event": "found" | "paired" | "connected" | "lost" | "sent" | "needs_key", ...}.
+// after MACHINE_TAG: {"event": "found" | "paired" | "connected" | "lost" | "sent" | "needs_key" | "music", ...}.
 #pragma once
 #include <string>
 
@@ -26,6 +29,7 @@ struct CompanionOptions {
     bool print = false;    // echo each body with the pet's status and reply
     bool machine = false;  // also print tagged JSON lines
     bool keys = true, idle = true, lock = true;
+    bool music = false;    // off unless asked for: song names are more than a count
 };
 
 constexpr const char* MACHINE_TAG = "@nestbox ";

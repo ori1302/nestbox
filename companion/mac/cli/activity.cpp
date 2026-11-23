@@ -6,12 +6,14 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <memory>
 #include <thread>
 #include <utility>
 
 #include "bonjour.h"
 #include "door/http.h"
 #include "http.h"
+#include "music.h"
 #include "pairing_store.h"
 #include "sensors.h"
 #include "util/json.h"
@@ -31,6 +33,41 @@ constexpr std::chrono::seconds REDISCOVER_INTERVAL{10};
 constexpr int DISCOVERY_BROWSE_MS = 1500;
 constexpr int POST_TIMEOUT_MS = 800;
 constexpr int HTTP_OK = 200, HTTP_UNAUTHORIZED = 401;
+constexpr std::chrono::seconds MUSIC_INTERVAL{5};     // the song's ring moves on this often, and a failed tell retries
+constexpr int MUSIC_GRACE_S = 10;                      // a song's note outlasts the song by this much
+constexpr size_t LINE_CHARACTERS = 60;                 // the pet's limit for a line
+
+size_t characters(const std::string& text) {
+    size_t n = 0;
+    for (unsigned char c : text) n += (c & 0xC0) != 0x80;
+    return n;
+}
+
+// The first `n` characters of UTF-8 text.
+std::string first_characters(const std::string& text, size_t n) {
+    size_t at = 0;
+    for (size_t count = 0; at < text.size() && count < n; count++)
+        do at++; while (at < text.size() && (static_cast<unsigned char>(text[at]) & 0xC0) == 0x80);
+    return text.substr(0, at);
+}
+
+// "Song - Artist" when it fits the pet's line, else the song alone.
+std::string song_line(const NowPlaying& song) {
+    const std::string both = song.song + " - " + song.artist;
+    if (!song.artist.empty() && characters(both) <= LINE_CHARACTERS) return both;
+    return first_characters(song.song, LINE_CHARACTERS);
+}
+
+std::string music_json(const std::optional<NowPlaying>& song) {
+    nestbox::JsonWriter json;
+    json.begin_object().field("from", "music");
+    if (!song) return json.field("state", "over").end_object().text();
+    json.field("state", "on").field("do", "dance").field("effect", "notes").field("color", "green");
+    json.field("line", song_line(*song));
+    if (song->percent)
+        json.field("gauge", *song->percent).field("label", "\u266a").field("for", song->seconds_left + MUSIC_GRACE_S);
+    return json.end_object().text();
+}
 
 std::string user_json(const CompanionOptions& o, const std::string& from, uint32_t keys) {
     nestbox::JsonWriter json;
@@ -79,17 +116,19 @@ class Companion {
 public:
     explicit Companion(CompanionOptions options)
         : o_(std::move(options)), url_(o_.device), from_(short_host()), last_count_(o_.keys ? key_presses() : 0),
-          sample_count_(last_count_) {}
+          sample_count_(last_count_), music_(o_.music ? std::make_unique<MusicWatch>() : nullptr) {}
 
     [[noreturn]] void run() {
         for (;;) {
-            std::this_thread::sleep_for(TICK);
+            if (music_) music_->listen(TICK);
+            else std::this_thread::sleep_for(TICK);
             if (look_again.exchange(false)) start_again();
-            if (!due()) continue;
-            if (url_.empty() && Clock::now() - last_discovery_ > REDISCOVER_INTERVAL) look_for_pet();
+            const bool report = due();
+            if (report && url_.empty() && Clock::now() - last_discovery_ > REDISCOVER_INTERVAL) look_for_pet();
             Url target;
             if (url_.empty() || !parse_url(url_, target)) continue;
-            send(target);
+            if (report) send(target);
+            if (music_) tell_music(target);
         }
     }
 
@@ -183,6 +222,35 @@ private:
         if (!answered && o_.device.empty()) url_.clear();    // it may have a new address
     }
 
+    // Tells the pet what plays: at once when a song starts, pauses or changes, and every MUSIC_INTERVAL while it
+    // plays so its ring moves. Nothing is sent before the first song, after a song's end, or once the music stops.
+    void tell_music(const Url& target) {
+        const Clock::time_point now = Clock::now();
+        const uint64_t changes = music_->changes();
+        const std::optional<NowPlaying> song = music_->now();
+        const bool changed = changes != music_seen_;
+        // A song past its end is not renewed: its note runs out MUSIC_GRACE_S later unless the player names the next.
+        const bool ended = song && song->percent && song->seconds_left <= 0;
+        if (!changed && (!(song && music_shown_) || ended)) return;
+        if (!song && !music_shown_) {
+            music_seen_ = changes;
+            return;
+        }
+        const bool retrying = changed && now - music_tried_ < MUSIC_INTERVAL && music_failed_;
+        if ((!changed && now - music_tried_ < MUSIC_INTERVAL) || retrying) return;
+        const std::string body = music_json(song);
+        std::string reply;
+        const int status = pet_.post(target, nestbox::TELL_PATH, body, POST_TIMEOUT_MS, &reply, paired_key());
+        music_tried_ = now;
+        music_failed_ = status != HTTP_OK;
+        if (o_.print) std::printf("%s -> %d %s\n", body.c_str(), status, reply.c_str());
+        machine("music").field("status", status).field("playing", song.has_value());
+        flush_machine();
+        if (music_failed_) return;
+        music_seen_ = changes;
+        music_shown_ = song.has_value();
+    }
+
     CompanionOptions o_;
     nestbox::JsonWriter machine_;
     std::string url_;
@@ -194,6 +262,10 @@ private:
     Clock::time_point last_key_ = Clock::now() - std::chrono::hours(1);
     Clock::time_point last_sent_ = Clock::now() - std::chrono::hours(1);
     Clock::time_point last_discovery_ = Clock::now() - std::chrono::hours(1);
+    std::unique_ptr<MusicWatch> music_;
+    uint64_t music_seen_ = 0;
+    bool music_shown_ = false, music_failed_ = false;
+    Clock::time_point music_tried_ = Clock::now() - std::chrono::hours(1);
 };
 
 }  // namespace

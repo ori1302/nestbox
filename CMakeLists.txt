@@ -40,10 +40,10 @@ if(APPLE)
   # The companion's command line: sends the Mac's activity to the pet, and single messages from scripts and hooks.
   add_executable(nestbox
     companion/mac/cli/main.cpp companion/mac/cli/activity.cpp companion/mac/cli/bonjour.cpp
-    companion/mac/cli/commands.cpp companion/mac/cli/http.cpp
+    companion/mac/cli/commands.cpp companion/mac/cli/http.cpp companion/mac/cli/music.cpp
     companion/mac/cli/pairing_store.cpp companion/mac/cli/sensors.cpp)
   target_include_directories(nestbox PRIVATE engine)
-  target_link_libraries(nestbox PRIVATE nestbox_warnings "-framework ApplicationServices")
+  target_link_libraries(nestbox PRIVATE nestbox_warnings "-framework ApplicationServices" "-framework CoreFoundation")
 
   # macOS's QR reader, which the setup test points at the pet's screen.
   find_program(SWIFTC swiftc REQUIRED)
