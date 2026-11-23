@@ -29,7 +29,9 @@ enum StatusText {
     private static func companionLine(_ model: Model) -> String {
         let companion = model.companion
         var line = "Companion: " + (companion.isRunning && companion.isConnected ? "connected" : companion.note)
-        let off = ActivitySignal.allCases.filter { !model.prefs.isEnabled($0) }
+        let changed = ActivitySignal.allCases.filter { model.prefs.isEnabled($0) != $0.startsOn }
+        let on = changed.filter { model.prefs.isEnabled($0) }, off = changed.filter { !model.prefs.isEnabled($0) }
+        if !on.isEmpty { line += " · on: " + on.map { $0.title.lowercased() }.joined(separator: ", ") }
         if !off.isEmpty { line += " · off: " + off.map { $0.title.lowercased() }.joined(separator: ", ") }
         return line
     }

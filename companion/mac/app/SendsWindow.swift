@@ -54,12 +54,22 @@ final class SendsWindow: NSObject {
     }
 
     func refreshHeader() {
-        let sending = ActivitySignal.allCases.filter { model.prefs.isEnabled($0) }.map { $0.title.lowercased() }
-        let target = model.petURL.map { "POST \($0.absoluteString)/v1/user" } ?? "POST /v1/user (no pet found yet)"
-        header.stringValue = "Each line is one message exactly as the companion sends it: \(target), "
+        let activity = ActivitySignal.allCases.filter { $0 != .music && $0 != .calendar && model.prefs.isEnabled($0) }
+        let sending = activity.map { $0.title.lowercased() }
+        let base = model.petURL?.absoluteString ?? ""
+        let found = model.petURL == nil ? " (no pet found yet)" : ""
+        header.stringValue = "Each line is one message exactly as the companion sends it: POST \(base)/v1/user\(found), "
             + "then -> the pet's status and reply.\n"
             + "Sending: " + (sending.isEmpty ? "nothing but a regular \"still here\"" : sending.joined(separator: ", "))
             + ", and the Mac's local time."
+            + (model.prefs.isEnabled(.music)
+                ? "\nMusic: the song playing, as POST \(base)/v1/tell from \"music\"." : "")
+            + (model.webhooks.state == .connected
+                ? "\nWebhooks: tells that came to this Mac's webhook URL with the right secret, as POST \(base)/v1/tell."
+                : "")
+            + (model.prefs.isEnabled(.calendar)
+                ? "\nCalendar: \"in a meeting\" or \"meeting soon\" with a countdown, as POST \(base)/v1/tell from \"calendar\"."
+                : "")
     }
 
     func reloadLog() {

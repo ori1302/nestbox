@@ -28,6 +28,15 @@ final class Model {
     private(set) var isScanning = false
     private var timer: Timer?
     private let networkWatch = NetworkWatch()
+    let calendar = CalendarWatch()
+    /// Webhooks through the relay; NESTBOX_RELAY and NESTBOX_RELAY_KEYCHAIN point a test at a local relay and a
+    /// keychain service of its own.
+    let webhooks: WebhookBridge = {
+        let env = ProcessInfo.processInfo.environment
+        return WebhookBridge(relay: env["NESTBOX_RELAY"].flatMap(URL.init(string:)) ?? WebhookBridge.defaultRelay,
+                             secrets: KeychainSecrets(service: env["NESTBOX_RELAY_KEYCHAIN"] ?? "pet.nestbox.relay"))
+    }()
+    private var calendarPet: URL?
 
     /// `childrenFile` records running children for cleanup after a crash; `childHome` sets HOME for the helper
     /// processes (where they keep ~/.nestbox/device).
@@ -62,14 +71,29 @@ final class Model {
         self.timer = timer
         networkWatch.onChange = { [weak self] in
             self?.companion.reachAgain()
+            self?.webhooks.reachAgain()
             self?.scanNetwork()
             self?.tick()
         }
         networkWatch.start()
+        calendar.onTell = { [weak self] tell in self?.sendCalendar(tell) }
+        calendar.onSay = { [weak self] words in
+            self?.sendCalendar(PetMessage(from: "calendar", id: "start", say: words, seconds: CalendarTell.startSeconds))
+        }
+        calendar.onNote = { [weak self] note in self?.log.append("-- " + note) }
+        if prefs.isEnabled(.calendar) { calendar.start() }
+        webhooks.onTell = { [weak self] tell in self?.forwardWebhook(tell) }
+        webhooks.onNote = { [weak self] note in self?.log.append("-- " + note) }
+        webhooks.onChange = { [weak self] in self?.onChange?() }
+        if prefs.receivesWebhooks { webhooks.start() } else { webhooks.pause() }   // paused: it stays so
         tick()
     }
 
     func tick() {
+        if calendar.isRunning, let url = petURL, url != calendarPet {
+            calendarPet = url
+            calendar.tellAgain()
+        }
         let ours = companion.process?.pid
         otherCompanions = ProcessTable.pids(runningExecutableAt: paths.helper.path).filter { $0 != ours }
         pollStatus()
@@ -78,14 +102,55 @@ final class Model {
 
     func setSignal(_ signal: ActivitySignal, enabled: Bool) {
         prefs.setEnabled(signal, enabled)
+        guard signal.isHelpers else {
+            log.append("-- \(signal.title) \(enabled ? "on" : "off")")
+            if enabled { calendar.start() } else { calendar.stop() }
+            return
+        }
         log.append("-- \(signal.title) \(enabled ? "on" : "off"): restarting the companion")
         companion.restart()
+        if signal == .music && !enabled { endMusic() }
+    }
+
+    /// Pauses or resumes webhooks; kept across launches.
+    func setReceivingWebhooks(_ on: Bool) {
+        prefs.receivesWebhooks = on
+        log.append("-- webhooks \(on ? "received" : "paused")")
+        if on { webhooks.resume() } else { webhooks.pause() }
+    }
+
+    /// A verified webhook: its tell goes to the pet as it came.
+    private func forwardWebhook(_ tell: Data) {
+        guard let base = petURL else {
+            log.append("-- webhook dropped: no pet found")
+            return
+        }
+        let body = String(decoding: tell, as: UTF8.self)
+        PetClient.post(data: tell, to: base) { [weak self] status, _ in
+            self?.log.append("\(body) -> \(status) (webhook)")
+        }
+    }
+
+    private func sendCalendar<Tell: Encodable>(_ tell: Tell) {
+        guard let base = petURL else { return }
+        calendarPet = base
+        let body = (try? JSONEncoder().encode(tell)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        PetClient.post(tell, to: base) { [weak self] status, _ in self?.log.append("\(body) -> \(status)") }
+    }
+
+    /// Music switched off: the song's note goes at once, instead of when the song would have ended.
+    private func endMusic() {
+        guard let base = petURL else { return }
+        PetClient.post(PetMessage(from: "music", state: "over"), to: base) { [weak self] status, _ in
+            self?.log.append("-- music over: \(status)")
+        }
     }
 
     /// Quitting: stops both children and waits for them, so the record of running children is empty and true.
     func stopAll() {
         companion.stopAndWait()
         petWindow.stopAndWait()
+        webhooks.stop()
         timer?.invalidate()
         networkWatch.stop()
         saveChildren()

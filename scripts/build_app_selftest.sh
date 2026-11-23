@@ -8,7 +8,7 @@ OUT="${NESTBOX_BUILD_DIR:-build}"
 MIN=13.0                 # as scripts/build_app.sh
 mkdir -p "$OUT"
 swiftc -O -swift-version 6 -target "$(uname -m)-apple-macos$MIN" \
-  -framework AppKit -framework ServiceManagement -framework IOKit -framework CoreWLAN \
+  -framework AppKit -framework ServiceManagement -framework IOKit -framework CoreWLAN -framework EventKit \
   $(ls companion/mac/app/*.swift | grep -v '/main\.swift$') companion/mac/selftest/*.swift \
   -o "$OUT/nestbox-menubar-selftest"
 echo "built: $OUT/nestbox-menubar-selftest"

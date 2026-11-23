@@ -31,6 +31,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>NestBox tells your pet when you are in a meeting or one starts soon. Only that reaches the pet, never a title, a place or a name.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>NestBox tells your pet when you are in a meeting or one starts soon. Only that reaches the pet, never a title, a place or a name.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>NestBox finds your pet and talks to it on your local network.</string>
 	<key>NSBonjourServices</key>

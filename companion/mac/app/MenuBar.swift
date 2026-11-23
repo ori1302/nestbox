@@ -19,6 +19,11 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let petsMenu = NSMenu()
     private let networkMenu = NSMenu()
     private let signalsMenu = NSMenu()
+    private let webhooksMenu = NSMenu()
+    private var webhookStatus: NSMenuItem?
+    private var webhookReceive: NSMenuItem?
+    private var webhookCopies: [NSMenuItem] = []
+    private var webhookRemove: NSMenuItem?
     private let screenMenu = NSMenu()
     private var screenItem: NSMenuItem?
     private var shownPets: PetsMenuState?
@@ -81,6 +86,17 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.representedObject = signal
             item.toolTip = signal.detail
         }
+        addSubmenu("Webhooks", webhooksMenu)
+        webhookStatus = addItem("", to: webhooksMenu)
+        webhookStatus?.isEnabled = false
+        webhookReceive = addItem("Receive Webhooks", to: webhooksMenu, action: #selector(toggleWebhooks))
+        webhooksMenu.addItem(.separator())
+        webhookCopies = [addItem("Copy Webhook URL", to: webhooksMenu, action: #selector(copyWebhookURL)),
+                         addItem("Copy Secret", to: webhooksMenu, action: #selector(copyWebhookSecret)),
+                         addItem("Copy Example Command", to: webhooksMenu, action: #selector(copyWebhookExample))]
+        webhooksMenu.addItem(.separator())
+        addItem("Access Key…", to: webhooksMenu, action: #selector(enterAccessKey))
+        webhookRemove = addItem("Remove Webhooks from This Mac…", to: webhooksMenu, action: #selector(removeWebhooks))
         addItem("What It Sends…", to: menu, action: #selector(showSends))
         menu.addItem(.separator())
         addItem("Teach a Coding Agent…", to: menu, action: #selector(showTeach))
@@ -135,6 +151,7 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let signal = item.representedObject as? ActivitySignal else { continue }
             item.state = model.prefs.isEnabled(signal) ? .on : .off
         }
+        refreshWebhooks()
         refreshPets()
         refreshNetwork()
         refreshLogin()
@@ -297,6 +314,93 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func runQuickTest(_ item: NSMenuItem) {
         model.send(QuickTest.all[item.tag]) { status, _ in if status != HTTPStatus.ok { NSSound.beep() } }
+    }
+
+    private func refreshWebhooks() {
+        let hooks = model.webhooks
+        let host = hooks.relay.host ?? "the relay"
+        let words: [WebhookBridge.State: String] = [
+            .off: "Off: enter the access key you were given",
+            .paused: "Paused: webhooks are turned away until you tick Receive Webhooks",
+            .connecting: "Connecting to \(host)…",
+            .connected: "Connected: webhooks reach your pet", .refused: "The access key was not accepted",
+            .full: "Every mailbox for this access key is in use", .removed: "This webhook URL was removed",
+            .replaced: "Another Mac uses this webhook URL", .unreachable: "Can't reach \(host); trying again"]
+        webhookStatus?.title = words[hooks.state] ?? ""
+        webhookReceive?.isEnabled = hooks.hasAccessKey
+        webhookReceive?.state = hooks.hasAccessKey && model.prefs.receivesWebhooks ? .on : .off
+        for item in webhookCopies { item.isEnabled = hooks.hasAccessKey && hooks.url != nil }
+        webhookRemove?.isEnabled = hooks.hasAccessKey || hooks.url != nil
+    }
+
+    @objc private func enterAccessKey() {
+        let ask = NSAlert()
+        ask.messageText = "Webhooks access key"
+        ask.informativeText = "Webhooks reach your pet through the NestBox relay, which sits in the middle: send "
+            + "nothing personal or sensitive in them. Paste the access key you were given."
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        field.placeholderString = model.webhooks.hasAccessKey ? "A key is saved; paste a new one" : "nbr_…"
+        ask.accessoryView = field
+        ask.addButton(withTitle: "Save")
+        ask.addButton(withTitle: "Cancel")
+        NSApp.comeToFront()
+        ask.window.initialFirstResponder = field
+        guard ask.runModal() == .alertFirstButtonReturn else { return }
+        let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            let empty = NSAlert()
+            empty.messageText = "Nothing was saved"
+            empty.informativeText = "The field was empty. Paste the access key (⌘V) and press Save."
+            NSApp.comeToFront()
+            empty.runModal()
+            return
+        }
+        model.webhooks.setAccessKey(key)
+        if !model.prefs.receivesWebhooks { model.setReceivingWebhooks(true) }   // a new key means webhooks are wanted
+        refresh()
+    }
+
+    @objc private func toggleWebhooks() {
+        model.setReceivingWebhooks(!model.prefs.receivesWebhooks)
+        refresh()
+    }
+
+    @objc private func removeWebhooks() {
+        let ask = NSAlert()
+        ask.messageText = "Remove webhooks from this Mac?"
+        ask.informativeText = "This Mac's webhook URL is deleted from the relay, so anything still sending to it gets "
+            + "nothing through, and the access key, URL and secret are forgotten here. To use webhooks again, enter "
+            + "the access key: you get a new URL and secret."
+        ask.addButton(withTitle: "Remove")
+        ask.addButton(withTitle: "Cancel")
+        NSApp.comeToFront()
+        guard ask.runModal() == .alertFirstButtonReturn else { return }
+        model.webhooks.removeFromThisMac { [weak self] status in
+            self?.model.log.append("-- webhooks removed from this Mac: \(status.map(String.init) ?? "nothing to remove")")
+            self?.refresh()
+            guard let status, ![204, 404, 401].contains(status) else { return }
+            let alert = NSAlert()
+            alert.messageText = "Nothing was removed"
+            alert.informativeText = status == 0 ? "The relay didn't answer. Check the network and try again."
+                : "The relay said no (\(status)). Try again in a minute."
+            NSApp.comeToFront()
+            alert.runModal()
+        }
+    }
+
+    @objc private func copyWebhookURL() { copy(model.webhooks.url?.absoluteString) }
+    @objc private func copyWebhookSecret() { copy(model.webhooks.secret) }
+
+    @objc private func copyWebhookExample() {
+        guard let url = model.webhooks.url, let secret = model.webhooks.secret else { return }
+        copy("curl -H 'Content-Type: application/json' -H 'X-NestBox-Secret: \(secret)' "
+             + "-d '{\"from\":\"ci\",\"state\":\"done\",\"line\":\"main is green\"}' \(url.absoluteString)")
+    }
+
+    private func copy(_ text: String?) {
+        guard let text else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @objc private func toggleLogin() {

@@ -119,6 +119,10 @@ final class SelfTest: @unchecked Sendable {
         companion()
         menu()
         signalsAndRestart()
+        musicSignal()
+        calendarPlan()
+        webhookChecks()
+        relayEndToEnd()
         quickTest()
         teaching()
         bonjour()
@@ -241,6 +245,162 @@ final class SelfTest: @unchecked Sendable {
         let restarted = { @MainActor in (m.companion.process?.pid ?? pid2) != pid2 && m.companion.isRunning }
         check(wait(10) { restarted() && lastSent(m, after: mark) != nil },
               "companion killed -> restarted (\(pid2) -> \(onMain { m.companion.process?.pid } ?? 0)) and posting")
+    }
+
+    // Music starts off; on, the companion is started with --music; off again, the song's note is ended at once.
+    private func musicSignal() {
+        let m = model
+        check(onMain { !m.prefs.isEnabled(.music) && !(m.companion.process?.arguments ?? []).contains("--music") },
+              "music is off to begin with: no --music")
+        onMain { m.setSignal(.music, enabled: true) }
+        check(onMain { (m.companion.process?.arguments ?? []).contains("--music") }, "music on: restarted with --music")
+        let mark = onMain { m.log.lines.count }
+        onMain { m.setSignal(.music, enabled: false) }
+        let over = { @MainActor in m.log.lines.dropFirst(mark).contains { $0.hasPrefix("-- music over: ") } }
+        check(onMain { !(m.companion.process?.arguments ?? []).contains("--music") } && wait(5) { over() },
+              "music off: restarted without --music, and told the pet the music is over  "
+              + "[\(onMain { m.log.lines.dropFirst(mark).last { $0.hasPrefix("-- music over: ") } } ?? "-")]")
+    }
+
+    // What the calendar tells: generic words and countdowns, from times alone.
+    private func calendarPlan() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ minutes: Double) -> Date { now.addingTimeInterval(minutes * 60) }
+        let meeting = CalendarEvent(start: at(-10), end: at(20))
+        var tell = CalendarTell.at(now, events: [meeting])
+        check(tell.state == "quiet" && tell.doing == "watch" && tell.line == "in a meeting" && tell.gauge == "timer"
+                  && tell.seconds == 20 * 60,
+              "in a meeting: quiet, watching its desk, \"in a meeting\", a countdown to its end")
+        let justStarted = CalendarTell.at(now, events: [CalendarEvent(start: now.addingTimeInterval(-20), end: at(30))])
+        check(justStarted.starts(after: CalendarTell.at(at(-1), events: []), at: now) && !tell.starts(after: nil, at: now)
+                  && !justStarted.starts(after: justStarted, at: now),
+              "\"Meeting time\" once, for a meeting that has just started, not one ten minutes in or one already told")
+        tell = CalendarTell.at(now, events: [meeting, CalendarEvent(start: at(-5), end: at(45))])
+        check(tell.state == "quiet" && tell.seconds == 45 * 60, "overlapping meetings: quiet until the last one ends")
+        tell = CalendarTell.at(now, events: [CalendarEvent(start: at(3), end: at(33))])
+        check(tell.state == "on" && tell.line == "meeting soon" && tell.seconds == 3 * 60,
+              "3 minutes before one: \"meeting soon\", a countdown to its start")
+        check(CalendarTell.at(now, events: [CalendarEvent(start: at(6), end: at(30))]) == .over,
+              "6 minutes before: nothing yet")
+        let skipped = [CalendarEvent(start: at(-5), end: at(5), allDay: true),
+                       CalendarEvent(start: at(-5), end: at(5), free: true),
+                       CalendarEvent(start: at(-5), end: at(5), declined: true),
+                       CalendarEvent(start: at(-5), end: at(5), canceled: true)]
+        check(CalendarTell.at(now, events: skipped) == .over, "all-day, free, declined and canceled events are not meetings")
+        check(CalendarTell.nextChange(after: now, events: [CalendarEvent(start: at(3), end: at(33))]) == at(3),
+              "the next change is the meeting's start, so the countdown hands over to the quiet with no gap")
+        check(CalendarTell.nextChange(after: now, events: [meeting, CalendarEvent(start: at(8), end: at(30))]) == at(3),
+              "or a heads-up starting, whichever comes first")
+        let body = (try? JSONEncoder().encode(CalendarTell.at(now, events: [meeting])))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        check(body.contains("\"for\":1200") && !body.contains("until"), "the tell says \"for\" in seconds  [\(body)]")
+    }
+
+    // The webhook bridge's own checks: the URL's id as the relay computes it, and what a relayed webhook must carry.
+    private func webhookChecks() {
+        check(Webhook.id(of: "abc") == "ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0",
+              "a mailbox's id is base64url(sha256(key)), as the relay computes it")
+        let key = Webhook.randomKey()
+        check(key.count == 43 && key != Webhook.randomKey(), "keys are 32 random bytes")
+        func frame(_ secret: String?, _ body: String) -> String {
+            let headers = secret.map { ["x-nestbox-secret": $0] } ?? [:]
+            let json = try? JSONSerialization.data(withJSONObject: ["headers": headers, "body": body])
+            return json.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }
+        let tell = #"{"from":"ci","state":"done"}"#
+        check(Webhook.tell(in: frame("s3cret", tell), secret: "s3cret") == Data(tell.utf8),
+              "a webhook with the secret: its tell, as it came")
+        check(Webhook.tell(in: frame("wrong", tell), secret: "s3cret") == nil
+                  && Webhook.tell(in: frame(nil, tell), secret: "s3cret") == nil
+                  && Webhook.tell(in: frame("s3cre", tell), secret: "s3cret") == nil,
+              "a wrong, missing or shorter secret: dropped")
+        check(Webhook.tell(in: frame("s3cret", "[1,2]"), secret: "s3cret") == nil
+                  && Webhook.tell(in: frame("s3cret", "not json"), secret: "s3cret") == nil
+                  && Webhook.tell(in: "garbage", secret: "s3cret") == nil,
+              "a body that is not a JSON object, or a frame that is not the relay's: dropped")
+    }
+
+    // Through a real relay (the relay run locally with `wrangler dev`), when NESTBOX_RELAY and
+    // NESTBOX_RELAY_TEST_KEY are set: connect, a webhook to the pet, a wrong secret, a new URL, off again. The test
+    // keychain service (NESTBOX_RELAY_KEYCHAIN) is emptied at the end.
+    private func relayEndToEnd() {
+        let env = ProcessInfo.processInfo.environment
+        guard let key = env["NESTBOX_RELAY_TEST_KEY"], env["NESTBOX_RELAY"] != nil,
+              let service = env["NESTBOX_RELAY_KEYCHAIN"] else {
+            print("skip  webhooks through a relay (no NESTBOX_RELAY, NESTBOX_RELAY_TEST_KEY, NESTBOX_RELAY_KEYCHAIN)")
+            return
+        }
+        let m = model
+        onMain { m.webhooks.setAccessKey(key) }
+        check(wait(10) { m.webhooks.state == .connected }, "webhooks: connected to the relay with the access key")
+        guard let url = onMain({ m.webhooks.url }), let secret = onMain({ m.webhooks.secret }) else { return }
+        var mark = onMain { m.log.lines.count }
+        let sent = post(url, secret: secret, #"{"from":"relaytest","state":"working","line":"from the internet"}"#)
+        let arrived = wait(5) {
+            m.log.lines.dropFirst(mark).contains { $0.contains("relaytest") && $0.hasSuffix("-> 200 (webhook)") }
+        }
+        check(sent == 202 && arrived, "a webhook with the secret: 202 from the relay, then the pet takes the tell")
+        let pet = get(URL(string: device)!.appendingPathComponent("v1"))
+        check(pet.contains("relaytest") && pet.contains("from the internet"), "and the pet shows it")
+        mark = onMain { m.log.lines.count }
+        let wrong = post(url, secret: "not-the-secret", #"{"from":"intruder","state":"working"}"#)
+        let dropped = wait(5) { m.log.lines.dropFirst(mark).contains { $0.contains("dropped") } }
+        check(wrong == 202 && dropped && !get(URL(string: device)!.appendingPathComponent("v1")).contains("intruder"),
+              "a webhook with the wrong secret is dropped on the Mac, and never reaches the pet")
+        onMain { m.setReceivingWebhooks(false) }
+        let pausedOK = wait(5) { m.webhooks.state == .paused }
+        check(pausedOK && post(url, secret: secret, #"{"from":"relaytest","state":"over"}"#) == 404,
+              "Receive Webhooks off: paused, and webhooks get 404")
+        onMain { m.webhooks.reachAgain() }
+        check(!wait(3) { m.webhooks.state == .connected } && onMain { m.webhooks.state == .paused },
+              "paused, a network change does not connect")
+        onMain { m.setReceivingWebhooks(true) }
+        check(wait(10) { m.webhooks.state == .connected }
+                  && post(url, secret: secret, #"{"from":"relaytest","state":"over"}"#) == 202,
+              "Receive Webhooks on: connected again, the same URL, and webhooks get through (202)")
+        let removed = Box<Int?>(nil), answered = Box(false)
+        onMain {
+            m.webhooks.removeFromThisMac { status in
+                removed.value = status
+                answered.value = true
+            }
+        }
+        check(wait(10) { answered.value } && removed.value == 204
+                  && onMain { m.webhooks.state == .off && !m.webhooks.hasAccessKey && m.webhooks.url == nil },
+              "Remove Webhooks from This Mac: the relay deleted the mailbox (\(removed.value.map(String.init) ?? "-")), "
+                  + "and key, URL and secret are gone here")
+        check(post(url, secret: secret, #"{"from":"relaytest","state":"over"}"#) == 404,
+              "and its URL is gone (404)")
+        onMain { m.webhooks.setAccessKey(key) }
+        check(wait(10) { m.webhooks.state == .connected } && onMain { m.webhooks.url != url },
+              "the access key again: a new mailbox, a new URL, connected")
+        onMain { m.webhooks.removeFromThisMac { _ in } }
+        check(wait(10) { !m.webhooks.hasAccessKey }, "removed again, leaving the relay as it was")
+        let leftovers = KeychainSecrets(service: service)
+        for account in ["access", "mailbox", "secret"] { leftovers.set(account, nil) }
+    }
+
+    private func post(_ url: URL, secret: String, _ body: String) -> Int {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(secret, forHTTPHeaderField: "X-NestBox-Secret")
+        request.httpBody = Data(body.utf8)
+        return fetch(request).0
+    }
+
+    private func get(_ url: URL) -> String { String(decoding: fetch(URLRequest(url: url)).1, as: UTF8.self) }
+
+    /// A request on this background thread, waiting for its answer: the status (0 without one) and the body.
+    private func fetch(_ request: URLRequest) -> (Int, Data) {
+        let done = DispatchSemaphore(value: 0)
+        let result = Box<(Int, Data)>((0, Data()))
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            result.value = ((response as? HTTPURLResponse)?.statusCode ?? 0, data ?? Data())
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 10)
+        return result.value
     }
 
     private func quickTest() {

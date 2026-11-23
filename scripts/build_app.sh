@@ -12,7 +12,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources" "$OBJ"
 for arch in arm64 x86_64; do
   swiftc -O -swift-version 6 -target "$arch-apple-macos$MIN" \
-    -framework AppKit -framework ServiceManagement -framework IOKit -framework CoreWLAN \
+    -framework AppKit -framework ServiceManagement -framework IOKit -framework CoreWLAN -framework EventKit \
     companion/mac/app/*.swift -o "$OBJ/NestBox-$arch"
 done
 lipo -create "$OBJ/NestBox-arm64" "$OBJ/NestBox-x86_64" -output "$APP/Contents/MacOS/NestBox"
@@ -31,8 +31,13 @@ VERSION=$(sed -n 's/^project(nestbox VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
-codesign --force --sign - --identifier pet.nestbox.cli "$APP/Contents/Helpers/nestbox"   # inner code first
-codesign --force --sign - "$APP"
+# Signed with the "NestBox Code Signing" certificate when this Mac's keychain has it, so macOS keeps the app's
+# permissions (calendars, local network, login item) across rebuilds and updates; ad hoc otherwise. NESTBOX_SIGN
+# names another identity, or "-" for ad hoc.
+SIGN="${NESTBOX_SIGN:-$(security find-certificate -c "NestBox Code Signing" -Z 2>/dev/null | awk '/SHA-1 hash:/ {print $3; exit}')}"
+SIGN="${SIGN:--}"
+codesign --force --sign "$SIGN" --identifier pet.nestbox.cli "$APP/Contents/Helpers/nestbox"   # inner code first
+codesign --force --sign "$SIGN" "$APP"
 codesign --verify --deep --strict "$APP"
 echo "built: $APP   (open it, or copy it to /Applications)"
 # The developer pet window gets a bundle of its own next to the build's nestbox-sim, so macOS shows it as

@@ -72,6 +72,7 @@ struct PetList: Decodable {
 /// A POST /v1/tell the app sends: some of its keys.
 struct PetMessage: Encodable {
     var from: String?
+    var id: String?
     var state: String?
     var doing: String?
     var say: String?
@@ -79,7 +80,7 @@ struct PetMessage: Encodable {
     var seconds: Int?
 
     private enum CodingKeys: String, CodingKey {
-        case from, state, say, sign
+        case from, id, state, say, sign
         case doing = "do"
         case seconds = "for"
     }
@@ -158,6 +159,12 @@ enum PetClient {
             completion(0, nil)
             return
         }
+        post(data: body, path, to: base, completion: completion)
+    }
+
+    /// POSTs a JSON body as it is (a tell that came as a webhook).
+    static func post(data body: Data, _ path: String = "/v1/tell", to base: URL,
+                     completion: @escaping @MainActor (Int, MessageReply?) -> Void) {
         var request = URLRequest(url: url(base, path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -62,7 +62,7 @@ final class CompanionSupervisor {
         } else if let id = prefs.pairedID {
             args += ["--id", id]
         }
-        for signal in ActivitySignal.allCases where !prefs.isEnabled(signal) { args.append(signal.disableFlag) }
+        args += ActivitySignal.allCases.compactMap { $0.flag(enabled: prefs.isEnabled($0)) }
         return args
     }
 
