@@ -40,6 +40,9 @@ public:
     // wants the body uses its share, SHARE_MS, which comes back over SHARE_BACK_MS. With none left it gives way, and
     // takes the body again only once SHARE_AGAIN_MS of it is back.
     static constexpr uint32_t TURN_MS = 8 * SECOND_MS, SHARE_MS = 8 * SECOND_MS, SHARE_BACK_MS = 22 * SECOND_MS;
+    // An `on` note's "do" takes turns with the pet's own life: ON_DO_MS of it, then ON_REST_MS of the pet's own, from
+    // when its body or state last changed.
+    static constexpr uint32_t ON_DO_MS = 30 * SECOND_MS, ON_REST_MS = 90 * SECOND_MS;
     static constexpr uint32_t SHARE_AGAIN_MS = 2 * SECOND_MS;
 
     // What one tell did, for its reply.
@@ -166,6 +169,7 @@ private:
     bool stale(const Kept& k) const;
     std::optional<Look> default_look(const Kept& k) const;
     bool has_body(const Kept& k, uint32_t now) const;
+    bool on_rests(const Kept& k, uint32_t now) const;   // an `on` note's "do" between its rounds
     int body_rank(const Kept& k, uint32_t now) const;
     std::string sender_of(const Kept& k) const { return ascii_lower(k.note.from); }
     bool has_share(const std::string& sender) const;
@@ -181,7 +185,8 @@ private:
     void finish_steps(Kept& k, uint32_t now);
     int end_notes(const std::string& name);
     void trim(const std::string& keep, std::vector<std::string>& warnings);
-    bool quiet_except(const std::string& key, uint32_t now) const;
+    bool quiet_except(const std::string& sender, uint32_t now) const;
+    bool hushed_for(const Kept& k, uint32_t now) const;   // quiet holds it back (3.7)
     Look own_life(uint32_t now);
     void pastime(Pet& pet, uint32_t now);
     int pick_pastime(uint32_t now);

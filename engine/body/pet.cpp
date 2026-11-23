@@ -162,8 +162,7 @@ Pet::Pose Pet::resolve_act(bool laps) const {
             r.row = row_;
             return r;
         case Act::Kind::Laps: {
-            const Anim* zoomies = egg_->find("Zoomies");
-            r.anim = zoomies && zoomies->rows >= ROWS ? zoomies : egg_->find("Walk");
+            r.anim = runs_laps() ? egg_->find("Zoomies") : egg_->find("Walk");
             r.lap = laps && r.anim && r.anim->rows >= ROWS && !stage_.lap().empty();
             if (!r.lap) r.anim = egg_->find("Idle");
             r.row = row_;
@@ -286,6 +285,7 @@ void Pet::render(Canvas& c, uint32_t now) {
         }
         if (r.lap && lapping_) {
             r.row = row_;                                    // the way it runs
+            if (!runs_laps()) t = uint32_t(stride_ms_);      // on its walk: the legs follow the ground covered
         } else if (r.lap) {                                  // between laps: the look's next play, once turned
             r = resolve(want_, false);
             t = lap_end_ms_ ? now - lap_end_ms_ : t;

@@ -101,7 +101,7 @@ Brain::Told Brain::tell(const Fields& f, uint32_t now) {
         t.state = "over";
         return t;
     }
-    if (n.state == State::None && n.until == Until::None && quiet_except(key, now)) {
+    if (n.state == State::None && n.until == Until::None && quiet_except(ascii_lower(n.from), now)) {
         t.why = "quiet is on, so this was skipped";
         return t;
     }
@@ -262,10 +262,21 @@ bool Brain::quiet(uint32_t now) const {
     return false;
 }
 
-// Quiet from any note but `key`: a sender's tell replaces its own quiet, so its own quiet doesn't skip it.
-bool Brain::quiet_except(const std::string& key, uint32_t now) const {
+// Quiet from another sender: a sender's own quiet never skips its own tells (see hushed_for).
+bool Brain::quiet_except(const std::string& sender, uint32_t now) const {
     for (const auto& [k, n] : notes_)
-        if (k != key && n.note.state == State::Quiet && !ended(n, now)) return true;
+        if (sender_of(n) != sender && n.note.state == State::Quiet && !ended(n, now)) return true;
+    return false;
+}
+
+// Quiet holds back every note but questions and the notes of the sender whose quiet it is: a calendar that says
+// "in a meeting" still shows its own look and words, and everyone else waits. The user's quiet (from the device)
+// holds back every sender.
+bool Brain::hushed_for(const Kept& k, uint32_t now) const {
+    if (k.note.state == State::Asking) return false;
+    const std::string mine = sender_of(k);
+    for (const auto& [key, q] : notes_)
+        if (q.note.state == State::Quiet && !ended(q, now) && sender_of(q) != mine) return true;
     return false;
 }
 
@@ -273,11 +284,9 @@ void Brain::update(uint32_t now) {
     if (forced_until_ && !live(forced_until_, now)) forced_until_ = 0;
     if (reaction_until_ && !live(reaction_until_, now)) reaction_until_ = 0;
     const bool there = user_.there(now);
-    const bool hushed = quiet(now);
     for (auto& [key, k] : notes_) {
         if (counts_presence(k)) {
-            const bool asking = k.note.state == State::Asking;
-            const bool counts = there && (asking || !hushed) && !waits_for_parts(k, now);
+            const bool counts = there && !hushed_for(k, now) && !waits_for_parts(k, now);
             if (counts) k.counted_ms += now - k.counted_to;
         }
         k.counted_to = now;
@@ -290,7 +299,7 @@ void Brain::update(uint32_t now) {
 bool Brain::visible(const Kept& k, uint32_t now) const {
     if (k.dismissed) return false;
     const Note& n = k.note;
-    const bool hushed = quiet(now);
+    const bool hushed = hushed_for(k, now);
     if (hushed && (is_result(n.state) || n.until != Until::None)) return false;   // they wait for quiet to end
     if (hushed && n.state == State::None) return false;
     return !waits_for_parts(k, now);
@@ -363,10 +372,16 @@ void Brain::count_share(uint32_t now) {
     share_counted_to_ = stamp(now);
 }
 
+bool Brain::on_rests(const Kept& k, uint32_t now) const {
+    return k.note.state == State::On && k.note.body.set() && (now - k.turn_from) % (ON_DO_MS + ON_REST_MS) >= ON_DO_MS;
+}
+
 bool Brain::has_body(const Kept& k, uint32_t now) const {
     const Note& n = k.note;
     if (n.body.off()) return false;
     if (n.state == State::Asking && !calling(k, now)) return false;
+    if (n.state == State::On && user_.typing(now)) return false;   // over what is simply going on, even its "do"
+    if (on_rests(k, now)) return false;
     if (n.body.set()) return !k.chain.done();
     if (n.state == State::Working && user_.typing(now)) return false;   // the user's typing shows over an agent's
     // A result waiting for the user plays its look for its moment, then rests until they are back; its line waits.
@@ -415,12 +430,12 @@ uint16_t Brain::line_color(const Kept& k) const {
 Brain::Pick Brain::pick(uint32_t now) const {
     Pick p;
     const std::vector<const Kept*> list = ranked(now);
-    const bool hushed = quiet(now);
+    auto hushed = [&](const Kept* k) { return hushed_for(*k, now); };
     auto key = [](const Kept* k) { return key_of(k->note.name()); };
     // The body has its own order (body_rank), and is shared: a sender with no share left gives way to the next.
     std::vector<const Kept*> bodies;
     for (const Kept* k : list)
-        if ((!hushed || k->note.state == State::Asking) && has_body(*k, now)) bodies.push_back(k);
+        if (!hushed(k) && has_body(*k, now)) bodies.push_back(k);
     std::stable_sort(bodies.begin(), bodies.end(), [&](const Kept* x, const Kept* y) {
         const int a = body_rank(*x, now), b = body_rank(*y, now);
         if (a != b) return a < b;
@@ -454,7 +469,7 @@ Brain::Pick Brain::pick(uint32_t now) const {
                     at + 1);
     }
     for (const Kept* k : voices) {
-        if (hushed && k->note.state != State::Asking) continue;
+        if (hushed(k)) continue;
         if (k->note.state == State::Asking && k->seen) continue;
         if (k->note.say.set() && !k->note.say.value.empty()) {
             p.bubble = key(k);
@@ -462,14 +477,14 @@ Brain::Pick Brain::pick(uint32_t now) const {
         }
     }
     for (const Kept* k : list) {
-        if (hushed && k->note.state != State::Asking) continue;
+        if (hushed(k)) continue;
         if (k->note.caption.set() && !k->note.caption.value.empty()) {
             p.caption = key(k);
             break;
         }
     }
     for (const Kept* k : voices) {
-        if (hushed && k->note.state != State::Asking) continue;
+        if (hushed(k)) continue;
         Bubble b = Bubble::None;
         if (k->note.sign.set()) b = k->note.sign.value;
         else if (!k->note.sign.off() && k->note.state == State::Asking) b = Bubble::Question;
@@ -480,7 +495,7 @@ Brain::Pick Brain::pick(uint32_t now) const {
         break;
     }
     for (const Kept* k : list) {
-        if (hushed && k->note.state != State::Asking) continue;
+        if (hushed(k)) continue;
         if (!k->note.effect.set()) continue;
         p.effect = key(k);
         p.effect_value = k->note.effect.value;
@@ -534,7 +549,7 @@ std::string Brain::why_not(const Kept& k, const Pick& p, uint32_t now) const {
         return "waiting for " + std::to_string(parts) + (parts == 1 ? " part that is" : " parts that are") +
                " still working";
     }
-    const bool hushed = quiet(now);
+    const bool hushed = hushed_for(k, now);
     if (hushed && (is_result(n.state) || n.until != Until::None)) return "quiet is on; it waits until quiet ends";
     if (n.until == Until::Seen) return "it stays until the user taps the pet";
     if (counts_presence(k) && !user_.there(now)) return "the user is away; it stays until they are back";
@@ -542,7 +557,9 @@ std::string Brain::why_not(const Kept& k, const Pick& p, uint32_t now) const {
     if (n.state == State::Asking && k.seen) return "the user has seen it; it waits for an answer";
     const bool wants_body = n.body.set() || (!n.body.off() && default_look(k).has_value());
     if (wants_body && p.body != key && !(n.state == State::Asking && !calling(k, now))) {
-        if (n.state == State::Working && !n.body.set() && user_.typing(now)) return "the user is typing";
+        if (((n.state == State::Working && !n.body.set()) || n.state == State::On) && user_.typing(now))
+            return "the user is typing";
+        if (on_rests(k, now)) return "its \"do\" rests between rounds; the pet lives its own life for now";
         if (hushed) return "quiet is on";
         if (!p.body.empty()) {
             auto owner = notes_.find(p.body);

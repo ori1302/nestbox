@@ -3,7 +3,7 @@
 // when the egg has one) and comes back there within the reaction (with no time for a lap, it plays in place), a party
 // runs, rests and runs again, a new look takes over mid-lap without a jump, and pets without an 8-row Zoomies play in
 // place; the guide for agents says which. A step's laps run as many rings as asked and are then done; with no lap to
-// run they are done at once.
+// run they are done at once. A step's laps on its walk face the way it runs, at 1.8 times its pace, in step.
 // Usage: lap_test EGG...
 #include <algorithm>
 #include <cmath>
@@ -215,6 +215,47 @@ void asked_laps(const Display& d, const Egg& z, const std::string& where) {
               std::to_string(int(perimeter)) + ")");
 }
 
+// Laps on its walk (no run of its own): it faces the way it runs all the way round, goes a little under twice its
+// walking pace, and its walk keeps step with the ground: as many walk cycles as the distance at its own pace.
+void walk_laps(const Display& d, const Egg& plain, const std::string& where) {
+    Run r(d, plain);
+    Act a;
+    a.kind = Act::Kind::Laps;
+    a.count = 1;
+    r.pet.act(a);
+    r.pet.want(Look::Act, r.t);
+    const float pace = plain.pace > 0 ? plain.pace : WALK_PX_S;
+    const Anim* walk = plain.find("Walk");
+    const float cycle_ms = float(ticks_to_ms(walk->total_ticks()));
+    int moved = 0, facing_off = 0, facing_far = 0, wraps = 0, last = -1;
+    float travelled = 0, fastest = 0;
+    for (int i = 0; i < 6000 && !r.pet.act_done(r.t); i++) {
+        const float x = r.pet.x(), y = r.pet.y();
+        r.frame();
+        const float dx = r.pet.x() - x, dy = r.pet.y() - y, step = std::hypot(dx, dy);
+        if (r.pet.phase() != Pet::Phase::Acting || step < 0.5f) continue;
+        moved++;
+        travelled += step;
+        fastest = std::max(fastest, step);
+        const int apart = turns_apart(r.pet.row(), row_toward(dx, dy));   // a frame over a corner: one facing apart
+        facing_off += apart > 0;
+        facing_far += apart > 1;
+        const int f = r.pet.drawn_frame();
+        if (last >= 0 && f < last) wraps++;
+        last = f;
+    }
+    check(moved > 20 && facing_far == 0 && facing_off * 10 <= moved,
+          where + ": round its lap it faces the way it runs (" + std::to_string(facing_off) + " of " +
+              std::to_string(moved) + " frames a facing off, " + std::to_string(facing_far) + " more)");
+    const float per_frame = pace * 1.8f * FRAME_MS / 1000;
+    check(fastest <= per_frame + 1 && fastest >= per_frame * 0.8f,
+          where + ": at 1.8 times its walking pace (" + std::to_string(fastest) + " px a frame)");
+    const float cycles = travelled / pace * 1000 / cycle_ms;
+    check(std::abs(float(wraps) - cycles) <= 1.5f, where + ": its walk keeps step with the ground (" +
+                                                        std::to_string(wraps) + " cycles over " +
+                                                        std::to_string(cycles) + " cycles' distance)");
+}
+
 // With no lap to run (no room for a ring, or no eight-facing run), a step's laps are done at once, in place.
 void laps_without_a_ring(const Display& d, const Egg& e, const std::string& where) {
     Run r(d, e);
@@ -295,6 +336,7 @@ int main(int argc, char** argv) {
             Pet probe;
             probe.set_display(d);
             probe.set_egg(&z);
+            if (!probe.stage().lap().empty()) walk_laps(d, plain, where + " on its walk");
             if (probe.stage().lap().empty()) {
                 plays_in_place(d, z, where + ", no room for a lap");
                 laps_without_a_ring(d, z, where + ", no room for a lap");

@@ -11,7 +11,8 @@ constexpr int WATCH_STEP_X = 14, WATCH_STEP_Y = 6;   // watching: a step back fr
 constexpr float ARRIVED_PX = 2;
 constexpr float CURVE_STEP_PX = 4;                   // a curve through points: one point this far apart, art pixels
 constexpr float HURRY = 2.0f;                        // walking speed to a look's spot, times its own pace
-constexpr float LAP_PACE = 3.0f;                     // running laps, times its own pace
+constexpr float LAP_PACE = 3.0f;                     // running laps with a run of its own, times its own pace
+constexpr float WALK_LAP_PACE = 1.8f;                // running laps on its walk: as fast as its legs still look right
 constexpr int MAX_LAPS = 6;                          // a reaction's laps, fitted to its length
 constexpr int MAX_ASKED_LAPS = 20;                   // laps a step may ask for
 constexpr float LAP_SPARE_MS = 600;                  // a reaction's laps leave this much of it unused
@@ -284,6 +285,14 @@ std::vector<Point> Pet::curve_through() const {
 
 float Pet::pace() const { return egg_ && egg_->pace > 0 ? egg_->pace : WALK_PX_S; }
 
+// Laps on a run of its own (Zoomies) go at LAP_PACE; on its walk, slower, with the walk keeping time with the ground.
+float Pet::lap_pace() const { return runs_laps() ? LAP_PACE : WALK_LAP_PACE; }
+
+bool Pet::runs_laps() const {
+    const Anim* zoomies = egg_ ? egg_->find("Zoomies") : nullptr;
+    return zoomies && zoomies->rows >= ROWS;
+}
+
 uint32_t Pet::turn_step_ms() const {
     const Anim* walk = egg_ ? egg_->find("Walk") : nullptr;
     if (!walk) return TURN_STEP_MS;
@@ -384,8 +393,9 @@ void Pet::round_corners(bool heading_on) {
 }
 
 // It walks its way at an even pace, carrying what is left of a step round each corner; its facing follows the way
-// it heads one facing at a time, so a turn passes through the facings in between.
-bool Pet::walk_along(float dt, float speed) {
+// it heads one facing at a time, so a turn passes through the facings in between. Running laps (`follow`), it faces
+// the way it heads at once: round a lap the way turns faster than a walk's turning would keep up.
+bool Pet::walk_along(float dt, float speed, bool follow) {
     if (route_.empty()) {
         walking_ = setting_off_ = turning_off_ = false;
         return true;
@@ -447,7 +457,9 @@ bool Pet::walk_along(float dt, float speed) {
             step = 0;
         }
     }
-    if (row_ != heading_ && walk_turn_ms_ >= turn_step_ms()) {
+    if (follow) {
+        row_ = heading_;
+    } else if (row_ != heading_ && walk_turn_ms_ >= turn_step_ms()) {
         row_ = turn_step(row_, heading_);
         walk_turn_ms_ = 0;
     }
@@ -488,7 +500,7 @@ void Pet::start_laps(uint32_t now) {
     if (want_ == Look::Act && act_.kind == Act::Kind::Laps) {
         laps = std::min(act_.count, MAX_ASKED_LAPS);
     } else if (is_reaction(look_now())) {
-        const float px_ms = pace() * LAP_PACE * act_speed() / 1000;
+        const float px_ms = pace() * lap_pace() * act_speed() / 1000;
         const float there_and_back = (route_length(start, in) + route_length(on, out)) / px_ms;
         const float one = route_length(on, loop) / px_ms;
         const Point first = in.empty() ? loop.front() : in.front();
@@ -508,7 +520,7 @@ void Pet::start_laps(uint32_t now) {
 
 void Pet::lap_update(float dt, uint32_t now) {
     if (lapping_) {
-        if (walk_along(dt, LAP_PACE * act_speed())) {
+        if (walk_along(dt, lap_pace() * act_speed(), true)) {
             lapping_ = false;
             lap_end_ms_ = now;
             turn_ms_ = now;

@@ -149,7 +149,8 @@ bool parse_tell(const Fields& f, Note& out, std::vector<std::string>& w) {
     }
 
     // The body: "do" as a word, an object or a list of steps; "at", "aim", "face", "times", "speed" and "for" make
-    // the single step's own.
+    // the single step's own. On a lasting note "for" is the note's life alone, so a sender renewing it with the
+    // time left keeps the same body, and its "do" keeps its turn and its rounds.
     if (f.str("do") == "false") {
         out.body.kind = Part<std::vector<Step>>::Kind::Off;
     } else if (is_list(f, "do")) {
@@ -180,7 +181,8 @@ bool parse_tell(const Fields& f, Note& out, std::vector<std::string>& w) {
         Fields step;
         for (const char* k : {"do", "at", "aim", "face", "times", "speed", "for"})
             for (const auto& [key, v] : f.values)
-                if (key == k || key.rfind(std::string(k) + ".", 0) == 0) step.set(key, v);
+                if (std::string(k) != "for" || !is_lasting(out.state))
+                    if (key == k || key.rfind(std::string(k) + ".", 0) == 0) step.set(key, v);
         if (f.has_object("do")) step = f.under("do");
         Step s;
         if (StepChain::parse(step, s, w)) {

@@ -227,7 +227,9 @@ private:
     void begin(uint32_t now_ms);
     void free_update(float dt, uint32_t now_ms);
     bool pick_roam_target(bool wander);
-    bool walk_along(float dt, float speed);
+    bool walk_along(float dt, float speed, bool follow = false);
+    float lap_pace() const;
+    bool runs_laps() const;
     void round_corners(bool heading_on);
     // Laps: from where it stands to the floor's lap, round it, and back to where it started.
     void start_laps(uint32_t now_ms);

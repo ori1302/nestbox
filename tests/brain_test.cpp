@@ -326,6 +326,14 @@ void the_users_activity() {
     check(b.decide(3000) == Look::Type, "the user's typing shows over an agent's working");
     tell(b, R"({"from":"claude","state":"working","do":"watch"})", 3500);
     check(b.decide(3500) == Look::Act, "unless the agent chose the body itself");
+    Brain m;
+    tell(m, R"({"from":"music","state":"on","do":"dance","effect":"notes"})", 1000);
+    check(m.decide(1000) == Look::Act, "a song: it dances");
+    report(m, R"({"from":"mac","keys":5,"idle":0})", 1500);
+    check(m.decide(1500) == Look::Type && note(m, "music", "", 1500).why == "the user is typing",
+          "the user's typing shows over what is simply going on, even its \"do\"");
+    report(m, R"({"from":"mac","keys":0,"idle":3})", 5000);
+    check(m.decide(5000) == Look::Act, "it dances again once the user stops typing");
     tell(b, R"({"from":"claude","state":"over"})", 3600);
     report(b, R"({"from":"mac","keys":0,"idle":0,"state":"locked"})", 4000);
     b.decide(4000);
@@ -625,8 +633,56 @@ void free_time_games() {
 
 }  // namespace
 
+// An `on` note's "do" takes turns with the pet's own life; its line and effect stay.
+void on_rounds() {
+    Brain b;
+    tell(b, R"({"from":"music","state":"on","do":"dance","effect":"notes","line":"a song"})", 1000);
+    check(b.decide(1000) == Look::Act && b.decide(1000 + Brain::ON_DO_MS - 1000) == Look::Act,
+          "a song: it dances for its round");
+    const uint32_t rest = 1000 + Brain::ON_DO_MS + 1000;
+    const Brain::NoteView n = note(b, "music", "", rest);
+    check(b.decide(rest) != Look::Act && n.why.find("rests between rounds") != std::string::npos &&
+              shows(n, "line") && shows(n, "effect"),
+          "then the pet's own life, with the song's line and notes still showing: " + n.why);
+    const uint32_t again = 1000 + Brain::ON_DO_MS + Brain::ON_REST_MS + 1000;
+    for (uint32_t t = rest; t < again; t += 1000) b.decide(t);
+    check(b.decide(again) == Look::Act, "and it dances again in the next round");
+
+    // As the music helper tells it: every 5 s, with the time left as "for".
+    Brain h;
+    bool rested = false;
+    for (uint32_t t = 1000; t < 1000 + Brain::ON_DO_MS + 20000; t += 5000) {
+        const std::string left = std::to_string(300 - (t - 1000) / 1000);
+        tell(h, R"({"from":"music","state":"on","do":"dance","effect":"notes","line":"a song","for":)" + left + "}", t);
+        for (uint32_t u = t; u < t + 5000; u += 500) rested = rested || h.decide(u) != Look::Act;
+    }
+    check(rested, "renewed every 5 s with the time left, it still rests between rounds");
+}
+
+// A sender's quiet holds back the others, not the sender itself: a meeting watches its desk and says so once.
+void own_quiet() {
+    Brain b;
+    report(b, R"({"from":"mac","keys":0,"idle":0,"state":"awake","next":60})", 500);
+    tell(b, R"({"from":"ci","state":"working","line":"building"})", 1000);
+    tell(b, R"({"from":"calendar","state":"quiet","do":"watch","line":"in a meeting","for":600})", 2000);
+    tell(b, R"({"from":"calendar","id":"start","say":"Meeting time"})", 2000);
+    const Look first = b.decide(2000);
+    check(first == Look::Act && b.saying(2000) == "Meeting time",
+          "the calendar's own look and words show through its quiet: " + std::to_string(int(first)) + " \"" +
+              b.saying(2000) + "\" " + b.why());
+    check(note(b, "ci", "", 2000).why == "quiet is on", "another sender's body waits: " + note(b, "ci", "", 2000).why);
+    for (uint32_t t = 2000; t <= 2000 + Brain::MOMENT_MS + 1000; t += 500) b.decide(t);
+    check(b.saying(2000 + Brain::MOMENT_MS + 1000).empty(), "the words were a moment: said once");
+    check(b.decide(2000 + Brain::MOMENT_MS + 1000) == Look::Act, "and it goes on watching its desk");
+    b.quiet_press(20000);
+    tell(b, R"({"from":"calendar","id":"start","say":"Meeting time"})", 21000);
+    check(b.saying(21000).empty(), "the user's own quiet holds back the calendar too");
+}
+
 int main() {
     a_tell_replaces_the_note();
+    on_rounds();
+    own_quiet();
     endings();
     lifetimes();
     moments();
