@@ -1,0 +1,38 @@
+name: Stars
+
+# When someone stars the repository, the owner's pet celebrates it, through their NestBox webhook URL. Set the
+# repository secrets PET_WEBHOOK_URL and PET_WEBHOOK_SECRET (NestBox menu: Webhooks, Copy Webhook URL and Copy
+# Secret); without them it does nothing. "Run workflow" sends a test.
+
+on:
+  watch:
+    types: [started]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Tell the pet
+        env:
+          URL: ${{ secrets.PET_WEBHOOK_URL }}
+          SECRET: ${{ secrets.PET_WEBHOOK_SECRET }}
+          WHO: ${{ github.event.sender.login }}
+          STARS: ${{ github.event.repository.stargazers_count }}
+          TEST: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "No PET_WEBHOOK_URL or PET_WEBHOOK_SECRET: nothing to do."
+            exit 0
+          fi
+          if [ "$TEST" = true ]; then say="A test star from $WHO"; else say="$WHO starred NestBox!"; fi
+          body=$(jq -cn --arg say "$say" --arg line "★ $STARS stars" \
+            '{from: "github", id: "stars", state: "done", do: [{do: "run"}, {do: "celebrate", sign: "star"}],
+              say: $say, line: $line, effect: "confetti", color: "yellow"}')
+          code=$(printf 'url = "%s"\nheader = "X-NestBox-Secret: %s"\n' "$URL" "$SECRET" |
+            curl -s -m 15 -o /dev/null -w '%{http_code}' --config - -H 'Content-Type: application/json' \
+              --data-binary "$body" || true)
+          echo "The pet's webhook answered $code (202: handed to the Mac; 404: the Mac was not connected)."
