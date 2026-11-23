@@ -313,8 +313,8 @@ void draw_ring(Canvas& c, const RingSpot& at, const MeterRing& m) {
 Box ink_box(const std::string& text, int size) {
     const FontSize& f = font_size(size);
     int pen = 0, x0 = INT_MAX, y0 = INT_MAX, x1 = INT_MIN, y1 = INT_MIN;
-    for (char ch : text) {
-        const Glyph* g = glyph_of(f, ch);
+    for (const char* s = text.c_str(); *s;) {
+        const Glyph* g = next_glyph(f, s);
         if (!g) continue;
         if (g->w && g->h) {
             x0 = std::min(x0, pen + g->x);

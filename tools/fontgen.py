@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Builds engine/screen/font_data.cpp: the pet's text font, DejaVu Sans Bold drawn without smoothing (sharp
-pixels) at three sizes whose capitals are 7, 10 and 15 px tall. One bit per pixel, printable ASCII.
+pixels) at three sizes whose capitals are 7, 10 and 15 px tall. One bit per pixel: printable ASCII, then the few
+characters in EXTRA.
 The device never reads a font file; this runs once on a computer with Pillow.
 
     python3 tools/fontgen.py /path/to/DejaVuSans-Bold.ttf
@@ -13,6 +14,15 @@ from PIL import Image, ImageDraw, ImageFont
 
 SIZES = {1: 10, 2: 14, 3: 20}            # engine text size -> font pixels (capitals 7, 10, 15 px)
 FIRST, LAST = 32, 126
+# After the ASCII glyphs, sorted by code point (the engine finds them by binary search): the Latin-1 letters and
+# signs that names and song titles use, typographic punctuation, and the symbols a tell's words often want.
+EXTRA = sorted(set(
+    [chr(c) for c in range(0xA1, 0x100) if chr(c) not in '\u00ad']    # ¡ … ÿ, without the soft hyphen
+    + list('\u2013\u2014\u2018\u2019\u201c\u201d\u2022\u2026\u20ac\u2122')   # – — ‘ ’ “ ” • … € ™
+    + list('\u2190\u2191\u2192\u2193')                                       # ← ↑ → ↓
+    + list('\u2600\u2601\u2602\u2605\u2606\u2615\u2665\u266a\u266b')            # ☀ ☁ ☂ ★ ☆ ☕ ♥ ♪ ♫
+    + list('\u26a0\u26a1\u2713\u2717\u2744')))                               # ⚠ ⚡ ✓ ✗ ❄
+WIDER = set('\u266a\u266b\u2713\u2717\u26a1\u2602')   # ♪ ♫ ✓ ✗ ⚡ ☂ drawn 1 px wider, to match the bold letters
 
 if len(sys.argv) < 2:
     sys.exit(__doc__)
@@ -36,10 +46,16 @@ for size, px in SIZES.items():
     _, low = ink('gjpqy')
     desc = low[3] - base
     bits, glyphs = [], []
-    for code in range(FIRST, LAST + 1):
-        ch = chr(code)
+    for ch in [chr(code) for code in range(FIRST, LAST + 1)] + EXTRA:
         adv = int(round(font.getlength(ch)))
         im, box = ink(ch)
+        if ch in WIDER and box:
+            wide = im.copy()
+            for y in range(im.height):
+                for x in range(1, im.width):
+                    if im.getpixel((x - 1, y)):
+                        wide.putpixel((x, y), 1)
+            im, box, adv = wide, wide.getbbox(), adv + 1
         if not box:
             glyphs.append((adv, 0, 0, 0, 0, len(bits)))
             continue
@@ -66,6 +82,12 @@ for size, px in SIZES.items():
     out.append('};')
     tables.append((size, px, cap, desc, name))
 out.append('}  // namespace')
+out.append('')
+out.append('const uint32_t FONT_EXTRA[] = {   // sorted: found by binary search')
+for i in range(0, len(EXTRA), 12):
+    out.append('    ' + ', '.join('0x%04X' % ord(c) for c in EXTRA[i:i + 12]) + ',')
+out.append('};')
+out.append(f'const int FONT_EXTRAS = {len(EXTRA)};')
 out.append('')
 out.append('const FontSize& font_size(int size) {')
 out.append('    static const FontSize sizes[] = {')

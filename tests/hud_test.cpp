@@ -12,6 +12,7 @@
 #include "check.h"
 #include "door/api.h"
 #include "mind/brain.h"
+#include "screen/font.h"
 #include "screen/hud.h"
 
 using namespace nestbox;
@@ -312,7 +313,31 @@ void ring_over_bottom_caption(const Display& d, const Egg& base) {
 
 }  // namespace
 
+// The font draws printable ASCII and its extra characters (Latin-1, punctuation, a few symbols) as themselves, any
+// other character as one "?".
+void font_characters() {
+    for (int size = 1; size <= 3; size++) {
+        const FontSize& f = font_size(size);
+        const char* note = "\u266a";
+        const char* ask = "?";
+        const Glyph* g = next_glyph(f, note);
+        check(g && g != next_glyph(f, ask) && g->w > 0 && *note == 0,
+              "the music note has a glyph of its own, size " + std::to_string(size));
+        check(text_px("a\u266ab", size) == text_px("a", size) + text_px("\u266a", size) + text_px("b", size),
+              "a note between letters takes its own width only, size " + std::to_string(size));
+        check(text_px("\u65e5", size) == text_px("?", size) && text_px("\xe2", size) == text_px("?", size),
+              "a character the font lacks, or a broken one, is one \"?\", size " + std::to_string(size));
+        const char* star = "\u2605";
+        const Glyph* s = next_glyph(f, star);
+        check(s && s != next_glyph(f, ask) && *star == 0, "the star has a glyph of its own, size " + std::to_string(size));
+    }
+    check(drawable("\u2605 128 stars") && drawable("Don\u2019t Stop \u2013 Beyonc\u00e9 \u2713") && drawable("Song \u266a")
+              && !drawable("\u65e5\u672c"),
+          "stars, curly quotes, dashes, accented letters and ticks are drawable; characters the font lacks are not");
+}
+
 int main(int argc, char** argv) {
+    font_characters();
     ring_layouts();
     captions_look_like_status_lines();
     caption_rows();

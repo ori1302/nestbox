@@ -55,8 +55,8 @@ void Canvas::glyph(const char* const* rows, int nrows, int x, int y, int scale, 
 void Canvas::text(const char* s, int x, int y, int size, uint16_t color) {
     color = tinted(color);
     const FontSize& f = font_size(size);
-    for (; *s; s++) {
-        const Glyph* g = glyph_of(f, *s);
+    while (*s) {
+        const Glyph* g = next_glyph(f, s);
         if (!g) continue;
         if (x + g->x + g->w <= 0 || x + g->x >= w) {   // wholly off the screen (a scrolling line's far end)
             x += g->advance;

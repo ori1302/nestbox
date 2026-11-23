@@ -55,8 +55,8 @@ std::string text_svg(const std::string& text, int size) {
                   w, h, w, h);
     std::string out = buf;
     int pen = 0;
-    for (char c : text) {
-        const Glyph* g = glyph_of(f, c == '~' ? ' ' : c);
+    for (const char* s = text.c_str(); *s;) {
+        const Glyph* g = next_glyph(f, s);
         if (!g) continue;
         const int row_bytes = (g->w + 7) / 8;
         for (int y = 0; y < g->h; y++) {
