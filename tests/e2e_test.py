@@ -217,27 +217,33 @@ def claude_code(t):
     base = {'session_id': SESSION, 'transcript_path': '/home/someone/.claude/x.jsonl', 'cwd': '/home/someone/p'}
     t.hook({**base, 'hook_event_name': 'UserPromptSubmit', 'prompt': 'please refactor the secret module'})
     n = t.pet.note('claude', SESSION[:8])
-    check(n and n['state'] == 'working' and n['line'] == 'thinking', 'a prompt: working, "thinking"')
+    check(n and n['state'] == 'working' and n['line'] == 'p: thinking', 'a prompt: working, the project and "thinking"')
     five, week = t.pet.note('claude', 'usage/5h'), t.pet.note('claude', 'usage/wk')
     check(five and week and five['showing'] == ['gauge'] and week['showing'] == ['gauge'],
           'the plan\'s usage: two gauges')
     t.hook({**base, 'hook_event_name': 'PreToolUse', 'tool_name': 'Edit',
             'tool_input': {'file_path': '/home/someone/p/secret/app.ts', 'old_string': 'SECRET'}})
     n = t.pet.note('claude', SESSION[:8])
-    check(n['line'] == 'editing app.ts', f'a tool: the file\'s name only ({n["line"]})')
+    check(n['line'] == 'p: editing app.ts', f'a tool: the project and the file\'s name only ({n["line"]})')
+    t.hook({**base, 'hook_event_name': 'PreToolUse', 'tool_name': 'Bash',
+            'tool_input': {'command': 'make secret', 'description': 'Build the app'}})
+    n = t.pet.note('claude', SESSION[:8])
+    check(n['line'] == 'p: Build the app' and 'make secret' not in json.dumps(n),
+          f'a command: Claude\'s description of it, never the command line ({n["line"]})')
     t.hook({**base, 'hook_event_name': 'PermissionRequest', 'tool_name': 'Bash', 'tool_input': {'command': 'rm -rf x'}})
     now = t.pet.now()
-    check(now['now'].get('say') == 'Allow Bash?' and now['now']['doing'] == 'wave', 'permission: it waves and asks')
+    check(now['now'].get('say') == 'p: Allow Bash?' and now['now']['doing'] == 'wave', 'permission: it waves and asks')
     check('rm -rf' not in json.dumps(now), 'the command line never reaches the pet')
     t.hook({**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'Bash'})
     check(t.pet.note('claude', SESSION[:8])['state'] == 'working', 'the tool ran: the question is gone')
     t.hook({**base, 'hook_event_name': 'SubagentStart', 'agent_id': 'a41cdeadbeef0001', 'agent_type': 'Explore'})
     part = t.pet.note('claude', SESSION[:8] + '/a41cdead')
-    check(part and part['line'] == 'sub-agent: Explore', 'a sub-agent is a part of the session')
+    check(part and part['line'] == 'p (Explore): starting', 'a sub-agent is a part of the session, named by its type')
     t.hook({**base, 'hook_event_name': 'Stop'})
     check(t.pet.note('claude', 'usage/5h') is None, 'Claude stops: the gauges go')
     n = t.pet.note('claude', SESSION[:8])
-    check(n['state'] == 'done' and 'waiting for 1 part' in n.get('why', ''), 'done waits for the sub-agent')
+    check(n['state'] == 'done' and n.get('line') == 'p: done' and 'waiting for 1 part' in n.get('why', ''),
+          'done, with the project; it waits for the sub-agent')
     t.hook({**base, 'hook_event_name': 'SubagentStop', 'agent_id': 'a41cdeadbeef0001', 'agent_type': 'Explore'})
     seen = t.watch(3, until=lambda b: b['look'] == 'celebrate')
     check(seen[-1]['look'] == 'celebrate', 'the sub-agent stops: it celebrates')
@@ -247,7 +253,7 @@ def claude_code(t):
     t.hook({**base, 'hook_event_name': 'PermissionRequest', 'tool_name': 'AskUserQuestion',
             'tool_input': {'questions': [{'question': 'Use the secret module?'}]}})
     now = t.pet.now()
-    check(now['now'].get('say') == 'Claude has a question' and 'secret' not in json.dumps(now),
+    check(now['now'].get('say') == 'p: Claude has a question' and 'secret' not in json.dumps(now),
           'Claude\'s own question: fixed words, never the question')
     t.hook({**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'AskUserQuestion'})
     t.hook({**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'mcp__ccd_turn__wrap_up',
@@ -257,7 +263,7 @@ def claude_code(t):
             'tool_input': {'recap': 'Three samples.', 'ask': 'Which secret look?', 'blocked': True}})
     t.hook({**base, 'hook_event_name': 'Stop'})
     now = t.pet.now()
-    check(t.pet.note('claude', SESSION[:8])['state'] == 'done' and now['now'].get('say') == 'Claude has a question'
+    check(t.pet.note('claude', SESSION[:8])['state'] == 'done' and now['now'].get('say') == 'p: Claude has a question'
           and now['now']['doing'] == 'wave', 'a turn that ends with a question: done, and it still waves and asks')
     t.hook({**base, 'hook_event_name': 'UserPromptSubmit', 'prompt': 'the first'})
     check(t.pet.note('claude', SESSION[:8] + '/ask') is None, 'the answer: the question is gone')

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"thinking\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"thinking\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           },
           {
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"asking\", say:(if .tool_name == \"ExitPlanMode\" then \"Claude has a plan\" else \"Claude has a question\" end)}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"asking\", say:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + (if .tool_name == \"ExitPlanMode\" then \"Claude has a plan\" else \"Claude has a question\" end)) | .[0:72])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(\"editing \" + ((.tool_input.file_path // .tool_input.notebook_path // \"\") | split(\"/\") | last))}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"editing \" + ((.tool_input.file_path // .tool_input.notebook_path // \"\") | split(\"/\") | last)) | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(\"reading \" + ((.tool_input.file_path // .tool_input.notebook_path // \"\") | split(\"/\") | last))}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"reading \" + ((.tool_input.file_path // .tool_input.notebook_path // \"\") | split(\"/\") | last)) | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"running a command\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + ((.tool_input.description // \"\") | if . == \"\" then \"running a command\" else . end)) | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"searching\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"searching\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"browsing\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"browsing\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -87,7 +87,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"delegating\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"delegating\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"planning\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"planning\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -107,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:\"using a tool\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"using a tool\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -120,7 +120,7 @@
           {
             "type": "command",
             "async": true,
-            "command": "D=~/.nestbox/device; t=$(jq -c 'select((.tool_input.ask // \"\") != \"\") | {from:\"claude\", color:\"orange\", id:(.session_id[0:8] + \"/ask\"), state:\"asking\", say:\"Claude has a question\"}'); [ -n \"$t\" ] && printf '%s' \"$t\" | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true"
+            "command": "D=~/.nestbox/device; t=$(jq -c 'select((.tool_input.ask // \"\") != \"\") | {from:\"claude\", color:\"orange\", id:(.session_id[0:8] + \"/ask\"), state:\"asking\", say:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"Claude has a question\") | .[0:72])}'); [ -n \"$t\" ] && printf '%s' \"$t\" | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true"
           }
         ]
       },
@@ -128,7 +128,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"thinking\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           },
           {
@@ -144,7 +144,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"thinking\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -155,7 +155,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"asking\", say:(if .tool_name == \"AskUserQuestion\" then \"Claude has a question\" elif .tool_name == \"ExitPlanMode\" then \"Claude has a plan\" else \"Allow \" + .tool_name + \"?\" end)}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"asking\", say:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + (if .tool_name == \"AskUserQuestion\" then \"Claude has a question\" elif .tool_name == \"ExitPlanMode\" then \"Claude has a plan\" else \"Allow \" + .tool_name + \"?\" end)) | .[0:72])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -167,7 +167,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"asking\", say:\"Claude has a question\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"asking\", say:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"Claude has a question\") | .[0:72])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -177,7 +177,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", say:\"your turn\", until:\"back\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", say:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"your turn\") | .[0:72]), until:\"back\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -188,7 +188,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(\"sub-agent: \" + (.agent_type // \"helper\"))}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"working\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"starting\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
@@ -210,7 +210,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"done\"}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"done\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + \"done\") | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           },
           {
@@ -226,7 +226,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"failed\", line:(\"claude: \" + ((.error // \"error\") | gsub(\"_\"; \" \")))}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
+            "command": "D=~/.nestbox/device; jq -c '{from:\"claude\", color:\"orange\", id:(.session_id[0:8] + (if .agent_id then \"/\" + .agent_id[0:8] else \"\" end)), state:\"failed\", line:(((((($ENV.CLAUDE_PROJECT_DIR // .cwd // \"\") | split(\"/\") | last) // \"\") as $p | (if .agent_id then (.agent_type // \"helper\") else \"\" end) as $a | if $p == \"\" then \"\" elif $a == \"\" then $p + \": \" else $p + \" (\" + $a + \"): \" end) + ((.error // \"error\") | gsub(\"_\"; \" \"))) | .[0:60])}' | curl -s -m 2 \"$(head -1 $D)/v1/tell\" -H \"Authorization: Bearer $(sed -n 's/^key=//p' $D)\" -d @- >/dev/null || true",
             "async": true
           }
         ]
