@@ -1,6 +1,6 @@
 # NestBox
 
-![Goose typing at its laptop while you type, calling you when an agent needs your OK, and asleep at night](assets/nestbox.gif)
+![Goose on the orange wedge: it walks to its laptop and types along, calls you when Claude needs your OK, celebrates a merged pull request, dances to a song and falls asleep at night](assets/nestbox.gif)
 
 NestBox is a small LCD that sits next to your computer, with a pixel pet living on it. The pet works at its desk
 while you type, watches while a coding agent works, calls you when the agent needs an answer, celebrates a passing
