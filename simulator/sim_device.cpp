@@ -69,6 +69,8 @@ std::string saved_choice() {
 constexpr const char* ROUTER_PATH = "/sim/router";
 // Plays one of the pet's own pastimes by name: {"pastime": "a nap in the sun"}. From this Mac only (recordings).
 constexpr const char* PASTIME_PATH = "/sim/pastime";
+// Where the pet's head was last drawn, in screen pixels: {"x": 140, "y": 96}. From this Mac only (recordings).
+constexpr const char* HEAD_PATH = "/sim/head";
 
 // Requests the phone makes while it is on the setup page or checking for a captive portal.
 bool from_setup_phone(const std::string& path) {
@@ -176,6 +178,12 @@ Response SimDevice::serve(const HttpRequest& q) {
         Response r;
         if (!parse_json(q.body, f) || !brain_.play_pastime(f.str("pastime"), clock_.now()))
             set_error(r, 400, "pastime is the name of one of the pet's own pastimes");
+        return r;
+    }
+    if (q.path == HEAD_PATH && q.method == "GET" && q.loopback) {
+        const Point head = pet_.drawn_head();
+        Response r;
+        r.body = "{\"x\": " + std::to_string(int(head.x)) + ", \"y\": " + std::to_string(int(head.y)) + "}";
         return r;
     }
     if (setup_.ap_open() && from_setup_phone(path_only(q.path))) radio_.saw_phone();
