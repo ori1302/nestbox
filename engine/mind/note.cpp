@@ -225,7 +225,7 @@ bool parse_tell(const Fields& f, Note& out, std::vector<std::string>& w) {
         Effect e;
         if (f.str("effect") == "false") out.effect.kind = Part<Effect>::Kind::Off;
         else if (effect_named(ascii_lower(f.str("effect")), e)) out.effect = {Part<Effect>::Kind::Set, e};
-        else w.push_back("unknown effect \"" + f.str("effect") + "\"; the effects are notes, sparkles and confetti");
+        else w.push_back("unknown effect \"" + f.str("effect") + "\"; the effects are notes, sparkles, confetti and letter");
     }
     if (f.has("color")) {
         const std::string c = ascii_lower(f.str("color"));

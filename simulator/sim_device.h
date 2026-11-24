@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -14,6 +15,7 @@
 #include "host/frame.h"
 #include "http_server.h"
 #include "options.h"
+#include "relay_link.h"
 #include "sim_radio.h"
 
 namespace nestbox {
@@ -97,6 +99,7 @@ private:
     std::optional<Daypart> held_daypart_;
     Look named_look_ = Look::Watch;           // the S key's place in the list of looks
     bool music_ = false;                      // the M key's music is on
+    std::unique_ptr<SimRelay> relay_;         // last: it calls into the device until it is gone
 };
 
 }  // namespace nestbox

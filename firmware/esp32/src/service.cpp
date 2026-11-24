@@ -8,6 +8,7 @@
 #include "host/protocol.h"
 #include "log.h"
 #include "net.h"
+#include "relay.h"
 #include "settings.h"
 #include "usb_port.h"
 #include "wall_clock.h"
@@ -50,6 +51,7 @@ void Upkeep::tick(uint32_t now) {
     save_changed_pet();
     check_health(now, online);
     restart_if_asked(now);
+    follow_relay(&app_);
 }
 
 // The chip's temperature and the Wi-Fi signal, for GET /v1; a hot chip slows the frames until it cools.

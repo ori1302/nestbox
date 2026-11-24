@@ -38,6 +38,7 @@ const Word WORDS[] = {
     {"celebrate", "celebrates", Act::Kind::Look, Look::Celebrate, true},
     {"sulk", "looks down", Act::Kind::Look, Look::Slump, false},
     {"dance", "sways", Act::Kind::Look, Look::Dance, false},
+    {"surprised", "jumps at something new", Act::Kind::Look, Look::Surprised, true},
     {"throw", "throws its thing at the aim", Act::Kind::Throw, Look::Idle, true},
 };
 constexpr int EAT_RUNS = 3;              // eating is a few bites, not one

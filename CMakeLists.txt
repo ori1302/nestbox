@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(nestbox VERSION 0.3.0 LANGUAGES CXX)
+project(nestbox VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,8 +34,10 @@ if(APPLE)
   find_package(SDL2 REQUIRED)
   add_executable(nestbox-sim
     simulator/main.cpp simulator/options.cpp simulator/sim_device.cpp simulator/window.cpp simulator/shot.cpp
-    simulator/image.cpp simulator/files.cpp simulator/http_server.cpp simulator/bonjour.cpp simulator/log.cpp)
-  target_link_libraries(nestbox-sim PRIVATE nestbox_engine nestbox_warnings SDL2::SDL2 "-framework ApplicationServices")
+    simulator/image.cpp simulator/files.cpp simulator/http_server.cpp simulator/bonjour.cpp simulator/log.cpp
+    simulator/relay_link.cpp)
+  target_link_libraries(nestbox-sim PRIVATE nestbox_engine nestbox_warnings SDL2::SDL2 "-framework ApplicationServices"
+    "-framework Network")
 
   # The companion's command line: sends the Mac's activity to the pet, and single messages from scripts and hooks.
   add_executable(nestbox
@@ -101,7 +103,7 @@ enable_testing()
 set(NIBBLE ${TEST_PETS_DIR}/nibble.egg)
 
 foreach(t api_test brain_test egg_test guide_test host_test hud_test lap_test move_test path_test pets_test pond_test
-          screens_test slices_test screen_palette_test)
+          relay_test screens_test slices_test screen_palette_test)
   add_executable(${t} tests/${t}.cpp)
   target_link_libraries(${t} PRIVATE nestbox_engine nestbox_warnings)
 endforeach()
@@ -111,6 +113,7 @@ add_test(NAME brain COMMAND brain_test)
 add_test(NAME egg COMMAND egg_test ${NIBBLE} ${AMBIENT_EGG})
 add_test(NAME guide COMMAND guide_test ${TEST_EGGS})
 add_test(NAME host COMMAND host_test)
+add_test(NAME relay COMMAND relay_test)
 add_test(NAME hud COMMAND hud_test ${TEST_EGGS})
 add_test(NAME lap COMMAND lap_test ${TEST_EGGS})
 add_test(NAME move COMMAND move_test ${TEST_EGGS})
@@ -123,7 +126,7 @@ add_test(NAME screen_palette COMMAND screen_palette_test ${TEST_EGGS})
 add_test(NAME layers COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/check_layers.py)
 add_test(NAME pack COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/pack_test.py --build ${CMAKE_BINARY_DIR})
 add_test(NAME studio COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/studio_test.py --build ${CMAKE_BINARY_DIR})
-set_tests_properties(api brain egg guide host hud lap move path pets pond screens slices screen_palette layers pack
+set_tests_properties(api brain egg guide host hud lap move path pets pond relay screens slices screen_palette layers pack
   studio
   PROPERTIES LABELS quick)
 

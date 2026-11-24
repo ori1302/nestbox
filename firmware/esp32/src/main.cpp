@@ -138,6 +138,10 @@ void load_api_settings(PetCore& core) {
     sc.night_from = settings::get_int(settings::NIGHT_FROM, sc.night_from);
     sc.night_to = settings::get_int(settings::NIGHT_TO, sc.night_to);
     sc.care = settings::get_flag(settings::CARE, sc.care);   // the LCD panels show the status bar's rest, not the shift
+    s.relay.mailbox = settings::get(settings::RELAY_MAILBOX);
+    s.relay.secret = settings::get(settings::RELAY_SECRET);
+    s.relay.on = settings::get_flag(settings::RELAY_ON, true);
+    core.dev.relay_state = "off";   // this firmware can hold the relay's socket; the relay task keeps it current
     core.brain.text_size(s.text);
     core.dev.save = [](const nestbox::Settings& kept) {
         settings::put(settings::API_KEY, kept.key);
@@ -151,6 +155,9 @@ void load_api_settings(PetCore& core) {
         settings::put_int(settings::NIGHT_FROM, k.night_from);
         settings::put_int(settings::NIGHT_TO, k.night_to);
         settings::put_flag(settings::CARE, k.care);
+        settings::put(settings::RELAY_MAILBOX, kept.relay.mailbox);
+        settings::put(settings::RELAY_SECRET, kept.relay.secret);
+        settings::put_flag(settings::RELAY_ON, kept.relay.on);
     };
 }
 

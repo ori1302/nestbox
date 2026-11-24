@@ -22,11 +22,20 @@ namespace nestbox {
 class Setup;
 
 // What the device keeps across restarts.
+// Webhooks through the relay (host/relay.h): the keys the Mac app hands over, and whether to use them. The mailbox
+// key alone lets the device connect; the user's access key for the relay stays on the Mac.
+struct RelaySettings {
+    std::string mailbox;         // this device's mailbox key; the webhook URL is derived from it
+    std::string secret;          // every webhook must carry it in X-NestBox-Secret
+    bool on = true;              // false: keys kept, socket closed, webhooks turned away
+};
+
 struct Settings {
     std::string key;             // the secret for keyed routes; "" until the first pairing
     bool locked = false;         // Lock: every /v1 route but pairing needs the key
     int text = 2;                // text size: 1 small, 2 medium, 3 large
     ScreenSettings screen;       // brightness and when the screen rests
+    RelaySettings relay;
 };
 
 // What the platform knows of the board's health, for GET /v1 and the device's page; unknown values stay unset.
@@ -76,6 +85,8 @@ struct Device {
     ScreenState screen_state = ScreenState::Awake;   // set each frame by step_frame()
     Shift shift;                 // where the platform shows the picture (burn-in care), set with screen_state
     Health health;               // the platform keeps it current
+    std::string relay_state;     // the relay link's word (host/relay.h), kept by the platform; "" if it has none
+    bool relay_changed = false;  // the relay settings changed: the platform reconfigures its link and clears this
     uint32_t restart_at = 0;     // a restart was asked for: the platform restarts at this time (0: none)
     uint32_t rate_second = 0;    // the rate limit's current second, and the requests in it
     int rate_count = 0;

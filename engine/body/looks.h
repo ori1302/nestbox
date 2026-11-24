@@ -62,7 +62,7 @@ const char* sign_key(Bubble b);
 bool sign_named(const std::string& key, Bubble& out);
 const std::vector<Bubble>& signs();
 
-// Effects by name: notes, sparkles, confetti ("" for Effect::None).
+// Effects by name: notes, sparkles, confetti, letter ("" for Effect::None).
 const char* effect_key(Effect e);
 bool effect_named(const std::string& key, Effect& out);
 const std::vector<Effect>& effects();

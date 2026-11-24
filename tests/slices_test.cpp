@@ -4,6 +4,7 @@
 // screen must match pixel for pixel, through walks, typing, effects, captions, gauges and time-of-day fades.
 // Usage: slices_test EGG...
 #include <cstdio>
+#include <iterator>
 #include <string>
 #include "check.h"
 #include "door/api.h"
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
         R"({"from":"t","caption":"A caption along the bottom","gauge":40,"label":"half"})",
         R"({"from":"t","do":"throw"})",
         R"({"from":"t","do":"run","effect":"sparkles"})",
+        R"({"from":"slack","say":"Dana wrote to you","effect":"letter","for":20,"do":[{"do":"surprised","face":"front"}]})",
         R"({"from":"t","state":"over"})",
     };
     int frames = 0;
@@ -66,10 +68,10 @@ int main(int argc, char** argv) {
             Canvas other(d.w, d.h);                       // the second buffer, as the firmware's `sending`
             uint32_t now = 0;
             int step = 0, bad = 0;
-            for (int f = 0; f < 1500 && !bad; f++, now += FRAME_MS) {
+            for (int f = 0; f < 1700 && !bad; f++, now += FRAME_MS) {
                 if (f % 200 == 100) {
-                    whole.tell(STEPS[step % 7], now);
-                    sliced.tell(STEPS[step % 7], now);
+                    whole.tell(STEPS[step % std::size(STEPS)], now);
+                    sliced.tell(STEPS[step % std::size(STEPS)], now);
                     step++;
                 }
                 if (f == 700 || f == 1100) {              // a time-of-day fade, then back

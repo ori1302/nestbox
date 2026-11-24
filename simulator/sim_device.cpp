@@ -41,6 +41,9 @@ Settings load_settings(const std::string& name, const Display& display) {
     sc.night_from = f.integer("night_from", sc.night_from);
     sc.night_to = f.integer("night_to", sc.night_to);
     if (f.has("care")) sc.care = f.flag("care");
+    s.relay.mailbox = f.str("relay_mailbox");
+    s.relay.secret = f.str("relay_secret");
+    if (f.has("relay_on")) s.relay.on = f.flag("relay_on");
     return s;
 }
 
@@ -51,6 +54,8 @@ void store_settings(const std::string& name, const Settings& s) {
                                               .field("text", s.text).field("bright", sc.bright).field("dim", sc.dim)
                                               .field("dim_after", sc.dim_after).field("off_after", sc.off_after)
                                               .field("night_from", sc.night_from).field("night_to", sc.night_to).field("care", sc.care)
+                                              .field("relay_mailbox", s.relay.mailbox)
+                                              .field("relay_secret", s.relay.secret).field("relay_on", s.relay.on)
                                               .end_object().text() << "\n";
 }
 
@@ -111,6 +116,22 @@ SimDevice::SimDevice(const Options& o, Shelf& shelf, std::vector<std::filesystem
         if (pet_changed_) pet_changed_(name);
         note("pet: %s\n", name.c_str());
     };
+    relay_ = std::make_unique<SimRelay>(SimRelay::Hooks{
+        [this] { return clock_.now(); },
+        [this]() -> std::optional<RelaySettings> {
+            std::lock_guard<std::mutex> lock(mu_);
+            if (!dev_.relay_changed && !dev_.relay_state.empty()) return std::nullopt;
+            dev_.relay_changed = false;
+            return dev_.settings.relay;
+        },
+        [this](const char* word) {
+            std::lock_guard<std::mutex> lock(mu_);
+            dev_.relay_state = word;
+        },
+        [this](const std::string& frame) {
+            std::lock_guard<std::mutex> lock(mu_);
+            return relay_deliver(dev_, frame, clock_.now());
+        }});
 }
 
 void SimDevice::load_eggs() {
@@ -187,6 +208,7 @@ float SimDevice::screen_level() {
 void SimDevice::start_as_new(uint32_t now) {
     dev_.settings = Settings{};
     dev_.settings.screen = screen_defaults(display_);
+    dev_.relay_changed = true;
     dev_.save(dev_.settings);
     brain_.text_size(dev_.settings.text);
     setup_.begin(radio_, shelf_.current_egg().name, now);

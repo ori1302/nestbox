@@ -1,5 +1,6 @@
 #include "door/api.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include "door/guide.h"
 #include "door/page.h"
@@ -67,7 +68,7 @@ TELL  a JSON object. Every key is optional. Each tell replaces what you
            (see /v1/pets/NAME), or a list of up to 8 steps. Pets differ:
            what one lacks falls back to what it has, with a warning.
              stand stroll run sleep type watch eat wave celebrate sulk
-             dance throw
+             dance surprised throw
   at       where: "here" "home" "desk" "target", or [x,y] in percent of
            the pet's scene from its top left
   aim      what a throw aims at, like "at". Default "target".
@@ -79,7 +80,7 @@ TELL  a JSON object. Every key is optional. Each tell replaces what you
   line     a line in the status bar; it scrolls     (60)
   gauge    0-100, or "timer" to count down "for".  label: text in it (8)
   sign     ! ? ... zzz heart star check cross note angry shock
-  effect   notes sparkles confetti
+  effect   notes sparkles confetti letter
   color    red orange yellow green blue purple pink white
   for      how long, in real time: "8s" "5m" "2h". A number is seconds.
   until    "seen": until the user taps the pet. "back": until they return.
@@ -135,6 +136,9 @@ DEVICE  POST /v1 (key)
          on for OLED. With nobody there, or at night, it rests sooner.
   restart true: it restarts after replying
   wifi   "forget": it forgets its Wi-Fi and asks for a new one
+  relay  {"mailbox":..., "secret":..., "on":true}: webhooks through the
+         NestBox relay (the Mac app sets them); "forget" clears them.
+         GET /v1 shows device.relay.state, never the keys.
 
 REPLY
   ok        false only if nothing could be used (then "error" and "help")
@@ -408,6 +412,12 @@ void write_device(JsonWriter& w, const Device& d) {
         .end_object()
         .field("text", SIZES[std::clamp(d.settings.text, 1, 3) - 1])
         .key("inputs").begin_array().str("button").str("motion").end_array();
+    if (!d.relay_state.empty())
+        w.key("relay").begin_object()
+            .field("state", d.relay_state)
+            .field("set", !d.settings.relay.mailbox.empty())
+            .field("on", d.settings.relay.on)
+            .end_object();
     if (d.health.temperature_c) w.key("temperature_c").num(double(*d.health.temperature_c), 0);
     if (d.health.wifi_dbm) w.field("wifi", wifi_word(*d.health.wifi_dbm)).field("wifi_dbm", *d.health.wifi_dbm);
     w
@@ -441,6 +451,39 @@ Response serve_now(Device& d, const ApiRequest& q) {
     w.end_array();
     write_device(w, d);
     return json_reply(w.end_object().text());
+}
+
+// A relay key: 16 to 128 characters of base64url (the relay's own keys carry a short prefix, also in that set).
+bool relay_key(const std::string& k) {
+    return k.size() >= 16 && k.size() <= 128 && std::all_of(k.begin(), k.end(), [](unsigned char c) {
+        return std::isalnum(c) || c == '-' || c == '_';
+    });
+}
+
+// "relay": the keys for webhooks through the relay, "on", or "forget".
+void set_relay(Device& d, const Fields& f, std::vector<std::string>& warnings) {
+    RelaySettings& r = d.settings.relay;
+    if (f.has("relay")) {
+        if (ascii_lower(f.str("relay")) == "forget") r = RelaySettings{};
+        else warnings.push_back("\"relay\" is an object with mailbox, secret and on, or \"forget\"");
+    } else {
+        const Fields rf = f.under("relay");
+        for (auto [k, into] : {std::pair{"mailbox", &r.mailbox}, {"secret", &r.secret}}) {
+            if (!rf.has(k)) continue;
+            if (relay_key(rf.str(k))) *into = rf.str(k);
+            else warnings.push_back(std::string("\"relay.") + k + "\" is 16 to 128 letters, digits, - and _");
+        }
+        if (rf.has("on")) {
+            const std::string on = ascii_lower(rf.str("on"));
+            if (on == "true" || on == "false") r.on = on == "true";
+            else warnings.push_back("\"relay.on\" is true or false");
+        }
+        for (const auto& [k, v] : rf.values)
+            if (k != "mailbox" && k != "secret" && k != "on")
+                warnings.push_back("unknown key \"relay." + k + "\"; it takes mailbox, secret and on");
+    }
+    d.relay_changed = true;
+    save(d);
 }
 
 Response handle_device(Device& d, const ApiRequest& q) {
@@ -537,6 +580,10 @@ Response handle_device(Device& d, const ApiRequest& q) {
             save(d);
         }
     }
+    if (f.has("relay") || f.has_object("relay")) {
+        any = true;
+        set_relay(d, f, warnings);
+    }
     if (f.has("wifi")) {
         any = true;
         if (ascii_lower(f.str("wifi")) != "forget") warnings.push_back("\"wifi\" takes only \"forget\"");
@@ -545,9 +592,11 @@ Response handle_device(Device& d, const ApiRequest& q) {
     }
     for (const auto& [k, v] : f.values)
         if (k.find('.') == std::string::npos && k != "pet" && k != "time" && k != "text" && k != "lock" && k != "key" &&
-            k != "wifi" && k != "restart")
-            warnings.push_back("unknown key \"" + k + "\"; this route takes pet, time, text, screen, wifi and restart");
-    if (!any) return error_reply(d, 400, "needs \"pet\", \"time\", \"text\", \"screen\", \"wifi\" or \"restart\"");
+            k != "wifi" && k != "restart" && k != "relay")
+            warnings.push_back("unknown key \"" + k +
+                               "\"; this route takes pet, time, text, screen, wifi, restart and relay");
+    if (!any)
+        return error_reply(d, 400, "needs \"pet\", \"time\", \"text\", \"screen\", \"wifi\", \"restart\" or \"relay\"");
     const Look look = d.brain.decide(q.now);
     JsonWriter w;
     w.begin_object().field("ok", true);
@@ -836,6 +885,7 @@ Response serve_words(Device&, const ApiRequest&) {
         .field("screen", "bright and dim (percents), dim_after and off_after (minutes, 0 never), night (\"23:00-07:00\" or \"off\"), care (true or false)")
         .field("restart", "true: restart the device")
         .field("wifi", "\"forget\": forget the Wi-Fi and ask for a new one")
+        .field("relay", "mailbox and secret (the relay's keys) and on (true or false), or \"forget\"")
         .end_object();
     w.key("limits").begin_object()
         .field("request", static_cast<long long>(MAX_BODY))

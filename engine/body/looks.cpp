@@ -187,13 +187,14 @@ const char* effect_key(Effect e) {
         case Effect::Notes: return "notes";
         case Effect::Sparkles: return "sparkles";
         case Effect::Confetti: return "confetti";
+        case Effect::Letter: return "letter";
         case Effect::None: break;
     }
     return "";
 }
 
 const std::vector<Effect>& effects() {
-    static const std::vector<Effect> all = {Effect::Notes, Effect::Sparkles, Effect::Confetti};
+    static const std::vector<Effect> all = {Effect::Notes, Effect::Sparkles, Effect::Confetti, Effect::Letter};
     return all;
 }
 

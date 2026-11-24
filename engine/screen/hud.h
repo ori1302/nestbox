@@ -13,7 +13,7 @@ namespace nestbox {
 enum class Bubble { None, Heart, Bang, Zzz, Dots, Note, Question, Angry, Shock, Cross, Star, Check };
 
 // Effects in the scene around the pet, on top of whatever it does.
-enum class Effect { None, Notes, Sparkles, Confetti };
+enum class Effect { None, Notes, Sparkles, Confetti, Letter };
 
 // A look's sign over the head; (hx, hy) is the top of the frame being shown, `unit` the sign's pixel size.
 void draw_bubble(Canvas& c, Bubble b, int hx, int hy, int unit, uint32_t now_ms);
@@ -21,6 +21,14 @@ void draw_note(Canvas& c, int x, int y, int unit);
 // Sparkles twinkling around the pet, whose middle is (cx, cy) and half-size `r`; confetti falling over the screen.
 void draw_sparkles(Canvas& c, int cx, int cy, int r, int unit, uint32_t now_ms);
 void draw_confetti(Canvas& c, const Display& d, uint32_t now_ms);
+// A letter with an unread dot over the head, (hx, hy) the top of the frame: centred, or `beside` a sign (to its
+// left, clear of it). It pops in with a bounce `shown_ms` after it first showed, then bobs. letter_box is where it
+// reaches, so a speech bubble keeps clear of it.
+struct LetterBox {
+    int left, top;
+};
+LetterBox letter_box(int hx, int hy, int unit, bool beside);
+void draw_letter(Canvas& c, int hx, int hy, int unit, bool beside, uint32_t shown_ms);
 
 // Where a sender's words go: a speech bubble over the pet, or a caption row across the top or bottom.
 enum class SpeechAt { Pet, Top, Bottom };

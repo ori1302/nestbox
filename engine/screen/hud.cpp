@@ -27,6 +27,16 @@ const char* const CROSS[] = {"11..11", "111111", ".1111.", ".1111.", "111111", "
 const char* const STAR[] = {"...1...", "..111..", "1111111", ".11111.", ".11.11.", "11...11"};
 const char* const CHECK[] = {".....11", "....111", "11.111.", "11111..", ".111...", "..1...."};
 const char* const SPARKLE[] = {".1.", "111", ".1."};
+const char* const ENVELOPE[] = {"11111111111", "11111111111", "11111111111", "11111111111", "11111111111",
+                                "11111111111", "11111111111"};
+const char* const FLAP[] = {"...........", ".1.......1.", "..1.....1..", "...11.11...", ".....1.....", "...........",
+                            "..........."};
+const char* const UNREAD[] = {"11", "11"};
+constexpr uint16_t FLAP_LINE = rgb(0xc9, 0xbf, 0x9c);
+constexpr int LETTER_W = 11, LETTER_H = 7;
+constexpr int LETTER_LIFT = 4;                                  // units between the head and the letter
+constexpr uint32_t LETTER_BOUNCE_MS = 80, LETTER_BOB_MS = 500;
+constexpr int LETTER_BOUNCE[] = {3, -2, 1};                     // units below its place, a step each LETTER_BOUNCE_MS
 
 // Status bar: lines that fit stay TURN_MS; a long one pauses, scrolls MS_PER_PX per pixel, then pauses again.
 constexpr uint32_t TURN_MS = 4000, SCROLL_PAUSE_MS = 700, SCROLL_END_MS = 400, MS_PER_PX = 12;
@@ -115,6 +125,24 @@ void draw_confetti(Canvas& c, const Display& d, uint32_t now_ms) {
         const int w = 2 + int((seed >> 12) % 2), h = 2 + int((seed >> 13) % 2);
         c.rect(x, y, w, h, COLOURS[k % 6]);
     }
+}
+
+LetterBox letter_box(int hx, int hy, int unit, bool beside) {
+    return {beside ? hx - (LETTER_W + 1) * unit : hx - LETTER_W * unit / 2, hy - (LETTER_LIFT + LETTER_H + 1) * unit};
+}
+
+void draw_letter(Canvas& c, int hx, int hy, int unit, bool beside, uint32_t shown_ms) {
+    const int u = unit;
+    const uint32_t step = shown_ms / LETTER_BOUNCE_MS;
+    const int bounce = step < 3 ? LETTER_BOUNCE[step] : 0;
+    const int bob = step < 3 ? 0 : int((shown_ms / LETTER_BOB_MS) % 2);
+    const LetterBox box = letter_box(hx, hy, u, beside);
+    const int x = box.left, y = box.top + u + (bounce + bob) * u;
+    c.glyph(ENVELOPE, LETTER_H, x, y, u, CREAM, INK);
+    for (int j = 0; j < LETTER_H; j++)
+        for (int i = 0; FLAP[j][i]; i++)
+            if (FLAP[j][i] == '1') c.rect(x + i * u, y + j * u, u, u, FLAP_LINE);
+    c.glyph(UNREAD, 2, x + (LETTER_W - 1) * u, y - u, u, RED, INK);
 }
 
 void draw_note(Canvas& c, int x, int y, int unit) { c.glyph(NOTE, 5, x, y, unit, CREAM, INK); }

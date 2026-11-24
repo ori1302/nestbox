@@ -134,7 +134,7 @@ public:
     void say(const std::string& text, uint16_t color, int size = SPEECH_SIZE, SpeechAt at = SpeechAt::Pet) {
         speech_ = {text, color, size, at};
     }
-    // An effect around the pet, whatever it does: music notes (and swaying), sparkles, confetti.
+    // An effect around the pet, whatever it does: music notes (and swaying), sparkles, confetti, a letter.
     void effect(Effect e) { effect_ = e; }
     // Words along the bottom of the screen, besides any bubble ("" for none).
     void caption(const std::string& text, uint16_t color) {
@@ -316,6 +316,8 @@ private:
     std::string caption_text_;
     uint16_t caption_color_ = 0;
     Effect effect_ = Effect::None;
+    // When the letter first showed (it waits for a reaction's sign to end), so it pops in once and then bobs.
+    std::optional<uint32_t> letter_since_;
     bool keys_ = true;
     float kps_ = -1;
     Bubble mark_ = Bubble::None;

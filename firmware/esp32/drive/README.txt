@@ -10,8 +10,9 @@ Your NestBox is plugged in. To let it follow your Mac:
 The app finds your NestBox by itself, even with several on one network.
 
 Every NestBox has its own name, like nestbox-3f2a. It shows the name at the bottom of
-its screen for a few seconds after it joins Wi-Fi, and again whenever you press its BOOT
-button. Once it is on your Wi-Fi, open http://<its name>.local in a browser.
+its screen for a few seconds after it joins Wi-Fi, and again whenever you hold its BOOT
+button until a countdown shows, then let go. Once it is on your Wi-Fi, open
+http://<its name>.local in a browser.
 
 Coding agents (Claude Code, Codex, Cursor...): ask yours to read
 http://<its name>.local/agents and connect itself.

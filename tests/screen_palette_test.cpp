@@ -4,6 +4,7 @@
 // Usage: screen_palette_test EGG...
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <cstdlib>
 #include <set>
 #include <string>
@@ -31,6 +32,7 @@ int main(int argc, char** argv) {
         R"({"from":"claude","id":"s1","state":"asking","say":"May I run the tests?"})",
         R"({"from":"t","do":"sleep","for":"10s"})",
         R"({"from":"t","sign":"heart","effect":"notes"})",
+        R"({"from":"slack","id":"D1","say":"Dana wrote to you","effect":"letter","for":20})",
         R"({"from":"t","state":"over"})",
     };
     int eggs = 0;
@@ -50,7 +52,8 @@ int main(int argc, char** argv) {
             uint32_t now = 0;
             int step = 0, bad_frames = 0;
             for (int f = 0; f < 1500; f++, now += 33) {
-                if (f % 140 == 50) handle_request(dev, "POST", "/v1/tell", STEPS[step++ % 10], now, "", "", true);
+                if (f % 140 == 50)
+                    handle_request(dev, "POST", "/v1/tell", STEPS[step++ % std::size(STEPS)], now, "", "", true);
                 if (f == 900) handle_request(dev, "POST", "/v1", R"({"time":"22:30"})", now, "", "", true);
                 step_frame(dev, now);
                 int nbad = 0, bx0 = 9999, by0 = 9999, bx1 = -1, by1 = -1;

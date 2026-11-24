@@ -298,7 +298,7 @@ void EspRadio::run(const ResetAll&, uint32_t) {
                             settings::TIME_ZONE, settings::HOST, settings::FLIP, settings::BRIGHTNESS,
                             settings::API_KEY, settings::LOCKED, settings::TEXT_SIZE, settings::DIM,
                             settings::DIM_AFTER, settings::OFF_AFTER, settings::NIGHT_FROM, settings::NIGHT_TO,
-                            settings::CARE})
+                            settings::CARE, settings::RELAY_MAILBOX, settings::RELAY_SECRET, settings::RELAY_ON})
         settings::remove(key);
     note("setup: everything reset but the pets, restarting\n");
     delay(100);

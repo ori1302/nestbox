@@ -386,6 +386,9 @@ void Pet::draw_overlays(Canvas& c, const Pose& p, bool acting, const std::option
     const int su = sign_unit();
     if (acting && p.bubble != Bubble::None) draw_bubble(c, p.bubble, top_x_, top_y_, su, now);
     else if (mark_ != Bubble::None) draw_bubble(c, mark_, top_x_, top_y_, su, now);
+    const bool signed_head = (acting && p.bubble != Bubble::None) || mark_ != Bubble::None;
+    // A letter waits for a reaction (the jump it comes with), turning to it included, and stands beside any sign.
+    const bool letter = effect_ == Effect::Letter && !(is_reaction(look_now()) && phase_ != Phase::Free);
     if (effect_ == Effect::Notes && !(acting && p.bubble == Bubble::Note))   // two notes drifting up, half a life apart
         for (int k = 0; k < 2; k++) {
             const uint32_t life = (now + k * NOTE_LIFE_MS / 2) % NOTE_LIFE_MS;
@@ -394,6 +397,11 @@ void Pet::draw_overlays(Canvas& c, const Pose& p, bool acting, const std::option
             if (life < NOTE_SHOWN_MS) draw_note(c, nx, ny, su);
         }
     if (effect_ == Effect::Sparkles) draw_sparkles(c, fx, fy - egg_->tall * u / 2, egg_->tall * u, su, now);
+    if (effect_ != Effect::Letter) letter_since_.reset();
+    if (letter) {
+        if (!letter_since_ || *letter_since_ > now) letter_since_ = now;
+        draw_letter(c, top_x_, top_y_, su, signed_head, now - *letter_since_);
+    }
     const Display& d = stage_.display();
     if (effect_ == Effect::Confetti) draw_confetti(c, d, now);
     const StatusBar::Lines& status = shown_status();
@@ -412,6 +420,11 @@ void Pet::draw_overlays(Canvas& c, const Pose& p, bool acting, const std::option
         at.left = reach_left_;
         at.right = std::max(reach_right_, top_x_ + SIGN_REACH * su);
         at.top = std::min(reach_top_, top_y_ - SIGN_REACH * su);
+        if (letter) {
+            const LetterBox box = letter_box(top_x_, top_y_, su, signed_head);
+            at.left = std::min(at.left, box.left);
+            at.top = std::min(at.top, box.top);
+        }
         at.feet = fy;
         const int row = drawn_row_;
         at.facing = row >= ROW_FRONT_RIGHT && row <= ROW_BACK_RIGHT ? 1 : row > ROW_BACK ? -1 : 0;

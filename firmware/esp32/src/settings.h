@@ -24,6 +24,9 @@ constexpr const char* OFF_AFTER = "off_after";
 constexpr const char* NIGHT_FROM = "night_from";   // and the night hours, minutes after midnight (-1 none)
 constexpr const char* NIGHT_TO = "night_to";
 constexpr const char* CARE = "care";         // "1": burn-in care (on by default for an OLED screen)
+constexpr const char* RELAY_MAILBOX = "relay_box";     // webhooks through the relay (host/relay.h): the mailbox key,
+constexpr const char* RELAY_SECRET = "relay_secret";   // the webhooks' secret,
+constexpr const char* RELAY_ON = "relay_on";           // and whether to use them
 
 constexpr int DEFAULT_BRIGHTNESS = nestbox::ScreenSettings::BRIGHT;
 
