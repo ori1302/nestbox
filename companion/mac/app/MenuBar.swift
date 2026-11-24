@@ -18,12 +18,24 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLogin), keyEquivalent: "")
     private let petsMenu = NSMenu()
     private let networkMenu = NSMenu()
-    private let signalsMenu = NSMenu()
+    private let connectionsMenu = NSMenu()
     private let webhooksMenu = NSMenu()
+    private var webhooksItem: NSMenuItem?
     private var webhookStatus: NSMenuItem?
     private var webhookReceive: NSMenuItem?
     private var webhookCopies: [NSMenuItem] = []
     private var webhookRemove: NSMenuItem?
+    private let slackMenu = NSMenu()
+    private var slackItem: NSMenuItem?
+    private var slackStatus: NSMenuItem?
+    private var slackWants: [NSMenuItem] = []
+    private var slackSetup: NSMenuItem?
+    private var slackDisconnect: NSMenuItem?
+    private var slackWindow: SlackWindow?
+    private let bridgeMenu = NSMenu()
+    private var bridgeStatus: NSMenuItem?
+    private var bridgeToggle: NSMenuItem?
+    private var bridgeCopies: [NSMenuItem] = []
     private let screenMenu = NSMenu()
     private var screenItem: NSMenuItem?
     private var shownPets: PetsMenuState?
@@ -78,33 +90,15 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         keyItem.target = self
         menu.addItem(keyItem)
-        addSubmenu("Pets on Your Network", networkMenu)
         addSubmenu("Pets", petsMenu)
-        addSubmenu("Signals", signalsMenu)
-        for signal in ActivitySignal.allCases {
-            let item = addItem(signal.title, to: signalsMenu, action: #selector(toggleSignal(_:)))
-            item.representedObject = signal
-            item.toolTip = signal.detail
-        }
-        addSubmenu("Webhooks", webhooksMenu)
-        webhookStatus = addItem("", to: webhooksMenu)
-        webhookStatus?.isEnabled = false
-        webhookReceive = addItem("Receive Webhooks", to: webhooksMenu, action: #selector(toggleWebhooks))
-        webhooksMenu.addItem(.separator())
-        webhookCopies = [addItem("Copy Webhook URL", to: webhooksMenu, action: #selector(copyWebhookURL)),
-                         addItem("Copy Secret", to: webhooksMenu, action: #selector(copyWebhookSecret)),
-                         addItem("Copy Example Command", to: webhooksMenu, action: #selector(copyWebhookExample))]
-        webhooksMenu.addItem(.separator())
-        addItem("Access Key…", to: webhooksMenu, action: #selector(enterAccessKey))
-        webhookRemove = addItem("Remove Webhooks from This Mac…", to: webhooksMenu, action: #selector(removeWebhooks))
+        addSubmenu("Connections", connectionsMenu)
+        buildConnections()
         addItem("What It Sends…", to: menu, action: #selector(showSends))
         menu.addItem(.separator())
-        addItem("Teach a Coding Agent…", to: menu, action: #selector(showTeach))
+        addSubmenu("Pets on Your Network", networkMenu)
+        addItem("Setup…", to: menu, action: #selector(showSetup))
         loginItem.target = self
         menu.addItem(loginItem)
-        addItem("Set Up Pet's Wi-Fi…", to: menu, action: #selector(showWiFiSetup))
-        forgetItem = addItem("Forget Pet's Wi-Fi…", to: menu, action: #selector(forgetWiFi))
-        addItem("Setup…", to: menu, action: #selector(showSetup))
         // For working on NestBox itself: the pet window (a pet on screen, no device needed) and test signals.
         let developer = NSMenu()
         addSubmenu("Developer", developer)
@@ -114,6 +108,15 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         screenMenu.autoenablesItems = false
         screenItem = addItem("Screen", to: developer)
         screenItem?.submenu = screenMenu
+        bridgeMenu.autoenablesItems = false
+        addItem("Webhooks Through This Mac", to: developer).submenu = bridgeMenu
+        bridgeStatus = addItem("", to: bridgeMenu)
+        bridgeStatus?.isEnabled = false
+        bridgeToggle = addItem("Receive Webhooks on This Mac", to: bridgeMenu, action: #selector(toggleBridge))
+        bridgeMenu.addItem(.separator())
+        bridgeCopies = [addItem("Copy This Mac's Webhook URL", to: bridgeMenu, action: #selector(copyBridgeURL)),
+                        addItem("Copy This Mac's Secret", to: bridgeMenu, action: #selector(copyBridgeSecret)),
+                        addItem("Copy Example Command", to: bridgeMenu, action: #selector(copyBridgeExample))]
         let quickTests = NSMenu()
         addItem("Quick Test", to: developer).submenu = quickTests
         for (index, test) in QuickTest.all.enumerated() {
@@ -121,6 +124,53 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         addItem("Quit NestBox", to: menu, action: #selector(quit), key: "q")
         refresh()
+    }
+
+    /// Everything the pet hears from: this Mac, coding agents, Slack, webhooks. Slack and Webhooks are ticked while
+    /// they reach the pet.
+    private func buildConnections() {
+        let mac = addItem("This Mac", to: connectionsMenu)
+        mac.isEnabled = false
+        for signal in ActivitySignal.allCases {
+            let item = addItem(signal.title, to: connectionsMenu, action: #selector(toggleSignal(_:)))
+            item.representedObject = signal
+            item.toolTip = signal.detail
+            item.indentationLevel = 1
+        }
+        connectionsMenu.addItem(.separator())
+        addItem("Teach a Coding Agent…", to: connectionsMenu, action: #selector(showTeach))
+        connectionsMenu.addItem(.separator())
+        slackItem = addItem("Slack", to: connectionsMenu)
+        slackItem?.submenu = slackMenu
+        slackMenu.autoenablesItems = false
+        slackStatus = addItem("", to: slackMenu)
+        slackStatus?.isEnabled = false
+        slackMenu.addItem(.separator())
+        slackWants = [addItem("Direct Messages", to: slackMenu, action: #selector(toggleSlackWant(_:))),
+                      addItem("Mentions", to: slackMenu, action: #selector(toggleSlackWant(_:))),
+                      addItem("Replies in Your Threads", to: slackMenu, action: #selector(toggleSlackWant(_:)))]
+        for (index, item) in slackWants.enumerated() { item.tag = index }
+        slackWants[0].toolTip = "A letter and a bubble for 20 seconds when someone writes to you, in a DM or a "
+            + "group DM"
+        slackWants[1].toolTip = "A letter and a bubble for 20 seconds when someone @mentions you in a public channel"
+        slackWants[2].toolTip = "A letter and a bubble for 20 seconds when someone replies in a thread you started "
+            + "or wrote in"
+        slackMenu.addItem(.separator())
+        slackSetup = addItem("Connect Slack…", to: slackMenu, action: #selector(showSlack))
+        slackDisconnect = addItem("Disconnect Slack…", to: slackMenu, action: #selector(disconnectSlack))
+        webhooksItem = addItem("Webhooks", to: connectionsMenu)
+        webhooksItem?.submenu = webhooksMenu
+        webhooksMenu.autoenablesItems = false
+        webhookStatus = addItem("", to: webhooksMenu)
+        webhookStatus?.isEnabled = false
+        webhookReceive = addItem("Receive Webhooks", to: webhooksMenu, action: #selector(toggleWebhooks))
+        webhooksMenu.addItem(.separator())
+        webhookCopies = [addItem("Copy Webhook URL", to: webhooksMenu, action: #selector(copyWebhookURL)),
+                         addItem("Copy Secret", to: webhooksMenu, action: #selector(copyWebhookSecret)),
+                         addItem("Copy Example Command", to: webhooksMenu, action: #selector(copyWebhookExample))]
+        webhooksMenu.addItem(.separator())
+        addItem("Access Key…", to: webhooksMenu, action: #selector(enterAccessKey))
+        webhookRemove = addItem("Remove Webhooks…", to: webhooksMenu, action: #selector(removeWebhooks))
     }
 
     @discardableResult
@@ -143,19 +193,21 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keyItem.isHidden = !model.companion.needsKey && !model.isGettingKey
         keyItem.title = model.isGettingKey ? "Press the Pet's Button…" : "Pair with the Pet's Button…"
         keyItem.isEnabled = !model.isGettingKey
-        forgetItem?.isEnabled = model.petURL != nil
         petWindowItem.title = model.petWindow.isRunning ? "Hide Pet Window" : "Show Pet Window"
         petWindowItem.state = model.petWindow.isRunning ? .on : .off
         refreshScreens()
-        for item in signalsMenu.items {
+        for item in connectionsMenu.items {
             guard let signal = item.representedObject as? ActivitySignal else { continue }
             item.state = model.prefs.isEnabled(signal) ? .on : .off
         }
         refreshWebhooks()
+        refreshSlack()
         refreshPets()
         refreshNetwork()
+        forgetItem?.isEnabled = model.petURL != nil
         refreshLogin()
         if let existingSetupWindow, existingSetupWindow.isOpen { existingSetupWindow.refresh() }
+        if let slackWindow, slackWindow.isOpen { slackWindow.refresh() }
         statusItem?.button?.appearsDisabled = model.status == nil
         sendsWindow?.refreshHeader()
     }
@@ -232,6 +284,7 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard state != shownNetwork else { return }
         shownNetwork = state
         networkMenu.removeAllItems()
+        defer { addWiFiItems() }
         if let device = model.deviceOverride {
             addItem("Fixed to \(device)", to: networkMenu).isEnabled = false
             return
@@ -249,6 +302,13 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = networkState(of: pet)
         }
         if model.isScanning { addItem("Looking…", to: networkMenu).isEnabled = false }
+    }
+
+    private func addWiFiItems() {
+        networkMenu.addItem(.separator())
+        addItem("Set Up Pet's Wi-Fi…", to: networkMenu, action: #selector(showWiFiSetup))
+        forgetItem = addItem("Forget Pet's Wi-Fi…", to: networkMenu, action: #selector(forgetWiFi))
+        forgetItem?.isEnabled = model.petURL != nil
     }
 
     // Mixed: in use by the companion but not paired yet.
@@ -317,20 +377,116 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func refreshWebhooks() {
-        let hooks = model.webhooks
+        let hooks = model.petWebhooks
         let host = hooks.relay.host ?? "the relay"
-        let words: [WebhookBridge.State: String] = [
-            .off: "Off: enter the access key you were given",
-            .paused: "Paused: webhooks are turned away until you tick Receive Webhooks",
-            .connecting: "Connecting to \(host)…",
-            .connected: "Connected: webhooks reach your pet", .refused: "The access key was not accepted",
-            .full: "Every mailbox for this access key is in use", .removed: "This webhook URL was removed",
-            .replaced: "Another Mac uses this webhook URL", .unreachable: "Can't reach \(host); trying again"]
-        webhookStatus?.title = words[hooks.state] ?? ""
-        webhookReceive?.isEnabled = hooks.hasAccessKey
-        webhookReceive?.state = hooks.hasAccessKey && model.prefs.receivesWebhooks ? .on : .off
+        let state = model.webhookState
+        var relay: RelayStatus?
+        if case .pet(let r) = state { relay = r }
+        webhookStatus?.title = state == .unsupported && model.webhooks.state == .connected
+            ? "Through this Mac for now: your pet's firmware can't hold them yet"
+            : Self.words(for: state, host: host)
+        webhooksItem?.state = relay?.on == true && relay?.state == "connected"
+            || model.prefs.webhooksThroughMac && model.webhooks.state == .connected ? .on : .off
+        webhookReceive?.isEnabled = relay?.set == true
+        webhookReceive?.state = relay.map { $0.on && $0.state != "replaced" } == true ? .on : .off
         for item in webhookCopies { item.isEnabled = hooks.hasAccessKey && hooks.url != nil }
         webhookRemove?.isEnabled = hooks.hasAccessKey || hooks.url != nil
+
+        let bridge = model.webhooks
+        let bridgeWords: [WebhookBridge.State: String] = [
+            .off: "Off: enter the access key under Webhooks", .paused: "Off",
+            .connecting: "Connecting to \(host)…", .connected: "Connected: webhooks to this Mac's URL reach the pet",
+            .refused: "The access key was not accepted", .full: "Every mailbox for this access key is in use",
+            .removed: "This Mac's webhook URL was removed", .replaced: "Another Mac uses this Mac's webhook URL",
+            .unreachable: "Can't reach \(host); trying again"]
+        bridgeStatus?.title = bridgeWords[bridge.state] ?? ""
+        bridgeToggle?.isEnabled = hooks.hasAccessKey
+        bridgeToggle?.state = model.prefs.webhooksThroughMac ? .on : .off
+        for item in bridgeCopies { item.isEnabled = model.prefs.webhooksThroughMac && bridge.url != nil }
+    }
+
+    private static func words(for state: PetWebhooks.State, host: String) -> String {
+        switch state {
+        case .noAccessKey: return "Off: enter the access key you were given"
+        case .noPet: return "No pet answers"
+        case .unsupported: return "Your pet's firmware can't take webhooks yet: update it"
+        case .notPaired: return "Webhooks go to your paired pet: pick it under Pets on Your Network"
+        case .needsKey: return "Your pet needs this Mac's key first: Pair with the Pet's Button"
+        case .refused: return "The access key was not accepted"
+        case .full: return "Every mailbox for this access key is in use"
+        case .handing: return "Giving your pet its webhook keys…"
+        case .pet(let relay):
+            if !relay.set { return "Giving your pet its webhook keys…" }
+            if !relay.on { return "Paused: webhooks are turned away until you tick Receive Webhooks" }
+            switch relay.state {
+            case "connected": return "Connected: webhooks reach your pet, even with this Mac asleep"
+            case "refused": return "The relay turned your pet away; it tries again hourly. Enter the access key again"
+            case "replaced": return "Another pet took this webhook URL: tick Receive Webhooks to take it back"
+            default: return "Your pet is connecting to \(host)…"
+            }
+        }
+    }
+
+    private func refreshSlack() {
+        let slack = model.slack
+        slackStatus?.title = Self.words(for: slack)
+        let wants = model.prefs.slackWants
+        for (item, on) in zip(slackWants, [wants.directMessages, wants.mentions, wants.threads]) {
+            item.state = on ? .on : .off
+            item.isEnabled = slack.hasTokens
+        }
+        slackItem?.state = slack.state == .connected ? .on : .off
+        slackSetup?.title = slack.hasTokens ? "Slack Setup…" : "Connect Slack…"
+        slackDisconnect?.isHidden = !slack.hasTokens
+    }
+
+    static func words(for slack: SlackWatch) -> String {
+        switch slack.state {
+        case .off: return "Off: Connect Slack to start"
+        case .idle: return "Off: nothing below is ticked"
+        case .checking, .connecting: return "Connecting to Slack…"
+        case .unreachable: return "Can't reach Slack; trying again"
+        case .refused(let words): return words
+        case .connected:
+            if let until = slack.quietUntil {
+                return "Do Not Disturb until \(SlackWatch.clock(until)): your pet stays quiet"
+            }
+            if slack.shared {
+                return "Another Mac uses this Slack app too: each gets only some messages"
+            }
+            return slack.account.map { "Connected as \($0.name) in \($0.team)" } ?? "Connected"
+        }
+    }
+
+    @objc private func toggleSlackWant(_ item: NSMenuItem) {
+        var wants = model.prefs.slackWants
+        switch item.tag {
+        case 0: wants.directMessages.toggle()
+        case 1: wants.mentions.toggle()
+        default: wants.threads.toggle()
+        }
+        model.setSlackWants(wants)
+        refresh()
+    }
+
+    @objc private func showSlack() {
+        let window = slackWindow ?? SlackWindow(model: model)
+        slackWindow = window
+        window.show()
+    }
+
+    @objc private func disconnectSlack() {
+        let ask = NSAlert()
+        ask.messageText = "Disconnect Slack?"
+        ask.informativeText = "Your pet stops hearing from Slack, and both tokens are forgotten on this Mac. The app "
+            + "stays in your Slack workspace: to remove it there too, open it at api.slack.com/apps and delete it. "
+            + "Connect again with new tokens any time."
+        ask.addButton(withTitle: "Disconnect")
+        ask.addButton(withTitle: "Cancel")
+        NSApp.comeToFront()
+        guard ask.runModal() == .alertFirstButtonReturn else { return }
+        model.slack.disconnect()
+        refresh()
     }
 
     @objc private func enterAccessKey() {
@@ -339,7 +495,7 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ask.informativeText = "Webhooks reach your pet through the NestBox relay, which sits in the middle: send "
             + "nothing personal or sensitive in them. Paste the access key you were given."
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.placeholderString = model.webhooks.hasAccessKey ? "A key is saved; paste a new one" : "nbr_…"
+        field.placeholderString = model.petWebhooks.hasAccessKey ? "A key is saved; paste a new one" : "nbr_…"
         ask.accessoryView = field
         ask.addButton(withTitle: "Save")
         ask.addButton(withTitle: "Cancel")
@@ -355,28 +511,35 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             empty.runModal()
             return
         }
-        model.webhooks.setAccessKey(key)
-        if !model.prefs.receivesWebhooks { model.setReceivingWebhooks(true) }   // a new key means webhooks are wanted
+        model.setWebhooksAccessKey(key)
         refresh()
     }
 
+    // Ticking it on a pet that another took the URL from takes it back.
     @objc private func toggleWebhooks() {
-        model.setReceivingWebhooks(!model.prefs.receivesWebhooks)
+        guard case .pet(let relay) = model.webhookState else { return }
+        model.setReceivingWebhooks(!relay.on || relay.state == "replaced")
+        refresh()
+    }
+
+    @objc private func toggleBridge() {
+        model.setWebhooksThroughMac(!model.prefs.webhooksThroughMac)
         refresh()
     }
 
     @objc private func removeWebhooks() {
         let ask = NSAlert()
-        ask.messageText = "Remove webhooks from this Mac?"
-        ask.informativeText = "This Mac's webhook URL is deleted from the relay, so anything still sending to it gets "
-            + "nothing through, and the access key, URL and secret are forgotten here. To use webhooks again, enter "
-            + "the access key: you get a new URL and secret."
+        ask.messageText = "Remove webhooks?"
+        ask.informativeText = "Your pet's webhook URL is deleted from the relay, so anything still sending to it gets "
+            + "nothing through; the pet forgets its keys, and the URL and secret are forgotten here, the access key "
+            + "too unless Developer › Webhooks Through This Mac is on. To use webhooks again, enter the access key: "
+            + "you get a new URL and secret."
         ask.addButton(withTitle: "Remove")
         ask.addButton(withTitle: "Cancel")
         NSApp.comeToFront()
         guard ask.runModal() == .alertFirstButtonReturn else { return }
-        model.webhooks.removeFromThisMac { [weak self] status in
-            self?.model.log.append("-- webhooks removed from this Mac: \(status.map(String.init) ?? "nothing to remove")")
+        model.petWebhooks.remove(pet: model.petURL, keepAccessKey: model.prefs.webhooksThroughMac) { [weak self] status in
+            self?.model.log.append("-- webhooks removed: \(status.map(String.init) ?? "nothing to remove")")
             self?.refresh()
             guard let status, ![204, 404, 401].contains(status) else { return }
             let alert = NSAlert()
@@ -388,13 +551,17 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func copyWebhookURL() { copy(model.webhooks.url?.absoluteString) }
-    @objc private func copyWebhookSecret() { copy(model.webhooks.secret) }
+    @objc private func copyWebhookURL() { copy(model.petWebhooks.url?.absoluteString) }
+    @objc private func copyWebhookSecret() { copy(model.petWebhooks.secret) }
+    @objc private func copyWebhookExample() { copy(example(model.petWebhooks.url, model.petWebhooks.secret)) }
+    @objc private func copyBridgeURL() { copy(model.webhooks.url?.absoluteString) }
+    @objc private func copyBridgeSecret() { copy(model.webhooks.secret) }
+    @objc private func copyBridgeExample() { copy(example(model.webhooks.url, model.webhooks.secret)) }
 
-    @objc private func copyWebhookExample() {
-        guard let url = model.webhooks.url, let secret = model.webhooks.secret else { return }
-        copy("curl -H 'Content-Type: application/json' -H 'X-NestBox-Secret: \(secret)' "
-             + "-d '{\"from\":\"ci\",\"state\":\"done\",\"line\":\"main is green\"}' \(url.absoluteString)")
+    private func example(_ url: URL?, _ secret: String?) -> String? {
+        guard let url, let secret else { return nil }
+        return "curl -H 'Content-Type: application/json' -H 'X-NestBox-Secret: \(secret)' "
+            + "-d '{\"from\":\"ci\",\"state\":\"done\",\"line\":\"main is green\"}' \(url.absoluteString)"
     }
 
     private func copy(_ text: String?) {

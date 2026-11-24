@@ -7,7 +7,7 @@ import Security
 /// the app passes it to the pet as POST /v1/tell. The relay is in the middle by design: what a service sends passes
 /// through it, so nothing personal or sensitive belongs in a webhook.
 ///
-/// Three secrets, all in the login keychain: the access key the relay's owner gave the user; the mailbox key, made
+/// Three secrets, all in the secret store: the access key the relay's owner gave the user; the mailbox key, made
 /// here, whose sha256 is the URL's id (receiving needs the key itself, which only travels to the relay); and the
 /// webhook secret, made here, which every webhook must carry.
 enum Webhook {
@@ -49,11 +49,76 @@ enum Webhook {
     }
 }
 
-/// Generic passwords in the login keychain under one service.
-struct KeychainSecrets {
+/// Secrets under one service, in a file only this user can read: `<service>.json` in a folder of mode 700
+/// (Application Support/NestBox, or NESTBOX_SECRETS_DIR). Not the keychain: for an app signed without an Apple
+/// developer account, macOS ties a keychain item's "Always Allow" to one exact build, so every update would ask for
+/// the login password again. A secret an earlier version left in the keychain moves here the first time it is read.
+struct SecretStore {
     let service: String
 
+    static var folder: URL {
+        if let dir = ProcessInfo.processInfo.environment["NESTBOX_SECRETS_DIR"] { return URL(fileURLWithPath: dir) }
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return support.appendingPathComponent("NestBox")
+    }
+
+    private var file: URL { Self.folder.appendingPathComponent(service + ".json") }
+
     func get(_ account: String) -> String? {
+        if let value = all()[account] { return value }
+        // The keychain is asked once per run: a refused prompt stays refused until the app starts again.
+        guard Self.firstLook(service + "/" + account), let old = keychainValue(account) else { return nil }
+        if set(account, old) { deleteFromKeychain(account) }
+        return old
+    }
+
+    /// Replaces the value (nil deletes it, from the keychain too); false when the file couldn't be written.
+    @discardableResult
+    func set(_ account: String, _ value: String?) -> Bool {
+        if value == nil { deleteFromKeychain(account) }
+        var values = all()
+        guard values[account] != value else { return true }
+        values[account] = value
+        return save(values)
+    }
+
+    private static let looked = Looked()
+
+    private static func firstLook(_ key: String) -> Bool { looked.insert(key) }
+
+    private final class Looked: @unchecked Sendable {
+        private let lock = NSLock()
+        private var keys: Set<String> = []
+
+        func insert(_ key: String) -> Bool { lock.withLock { keys.insert(key).inserted } }
+    }
+
+    private func all() -> [String: String] {
+        guard let data = try? Data(contentsOf: file),
+              let values = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return values
+    }
+
+    private func save(_ values: [String: String]) -> Bool {
+        let manager = FileManager.default
+        do {
+            try manager.createDirectory(at: Self.folder, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: Self.folder.path)
+            if values.isEmpty {
+                if manager.fileExists(atPath: file.path) { try manager.removeItem(at: file) }
+                return true
+            }
+            try JSONEncoder().encode(values).write(to: file, options: .atomic)
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func keychainValue(_ account: String) -> String? {
         let query: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: service,
                                       kSecAttrAccount: account, kSecReturnData: true]
         var found: CFTypeRef?
@@ -62,15 +127,10 @@ struct KeychainSecrets {
         return String(data: data, encoding: .utf8)
     }
 
-    func set(_ account: String, _ value: String?) {
+    private func deleteFromKeychain(_ account: String) {
         let item: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: service,
                                      kSecAttrAccount: account]
         SecItemDelete(item as CFDictionary)
-        guard let value else { return }
-        var add = item
-        add[kSecValueData] = Data(value.utf8)
-        add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
     }
 }
 
@@ -95,7 +155,7 @@ final class WebhookBridge {
     private static let longestWait: TimeInterval = 60
 
     let relay: URL
-    private let secrets: KeychainSecrets
+    private let secrets: SecretStore
     var onTell: ((Data) -> Void)?
     var onNote: ((String) -> Void)?
     var onChange: (() -> Void)?
@@ -113,7 +173,7 @@ final class WebhookBridge {
     private var heard = Date()
     private let session = URLSession(configuration: .ephemeral)
 
-    init(relay: URL, secrets: KeychainSecrets) {
+    init(relay: URL, secrets: SecretStore) {
         self.relay = relay
         self.secrets = secrets
     }
@@ -282,8 +342,7 @@ final class WebhookBridge {
     private func closed(_ task: URLSessionWebSocketTask) {
         let status = (task.response as? HTTPURLResponse)?.statusCode
         switch task.closeCode.rawValue {
-        case 4000: give(.replaced, "another Mac connected with this webhook URL; Remove Webhooks from This Mac… and "
-                                   + "the access key again give this Mac its own")
+        case 4000: give(.replaced, "another Mac connected with this webhook URL")
         case 4001, 4003: give(.removed, "the relay removed this mailbox or ended the access key")
         default:
             if status == 401 { give(.removed, "the relay no longer knows this mailbox") }

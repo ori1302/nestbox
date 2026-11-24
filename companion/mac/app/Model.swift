@@ -29,14 +29,23 @@ final class Model {
     private var timer: Timer?
     private let networkWatch = NetworkWatch()
     let calendar = CalendarWatch()
-    /// Webhooks through the relay; NESTBOX_RELAY and NESTBOX_RELAY_KEYCHAIN point a test at a local relay and a
-    /// keychain service of its own.
-    let webhooks: WebhookBridge = {
-        let env = ProcessInfo.processInfo.environment
-        return WebhookBridge(relay: env["NESTBOX_RELAY"].flatMap(URL.init(string:)) ?? WebhookBridge.defaultRelay,
-                             secrets: KeychainSecrets(service: env["NESTBOX_RELAY_KEYCHAIN"] ?? "pet.nestbox.relay"))
-    }()
+    /// Webhooks through the relay. NESTBOX_RELAY and NESTBOX_RELAY_SECRETS point a test at a local relay and a
+    /// secrets file of its own.
+    private static let relay = ProcessInfo.processInfo.environment["NESTBOX_RELAY"].flatMap(URL.init(string:))
+        ?? WebhookBridge.defaultRelay
+    private static let relaySecrets = SecretStore(
+        service: ProcessInfo.processInfo.environment["NESTBOX_RELAY_SECRETS"] ?? "pet.nestbox.relay")
+    /// The pet holds the relay's socket itself: the usual way.
+    let petWebhooks = PetWebhooks(relay: Model.relay, secrets: Model.relaySecrets)
+    /// Developer › Webhooks Through This Mac: a socket of this Mac's own, on a mailbox of its own.
+    let webhooks = WebhookBridge(relay: Model.relay, secrets: Model.relaySecrets)
     private var calendarPet: URL?
+    /// Slack through Socket Mode. NESTBOX_SLACK_API and NESTBOX_SLACK_SECRETS point a test at a stand-in Slack and
+    /// a secrets file of its own.
+    let slack = SlackWatch(
+        api: ProcessInfo.processInfo.environment["NESTBOX_SLACK_API"].flatMap(URL.init(string:)) ?? Slack.api,
+        secrets: SecretStore(service: ProcessInfo.processInfo.environment["NESTBOX_SLACK_SECRETS"]
+                                     ?? "pet.nestbox.slack"))
 
     /// `childrenFile` records running children for cleanup after a crash; `childHome` sets HOME for the helper
     /// processes (where they keep ~/.nestbox/device).
@@ -72,6 +81,7 @@ final class Model {
         networkWatch.onChange = { [weak self] in
             self?.companion.reachAgain()
             self?.webhooks.reachAgain()
+            self?.slack.reachAgain()
             self?.scanNetwork()
             self?.tick()
         }
@@ -82,10 +92,27 @@ final class Model {
         }
         calendar.onNote = { [weak self] note in self?.log.append("-- " + note) }
         if prefs.isEnabled(.calendar) { calendar.start() }
+        petWebhooks.onNote = { [weak self] note in self?.log.append("-- " + note) }
+        petWebhooks.onChange = { [weak self] in self?.onChange?() }
+        petWebhooks.onAdoptBridgeMailbox = { [weak self] in
+            self?.prefs.webhooksThroughMac = false
+            self?.webhooks.pause()
+        }
+        petWebhooks.addressOfPet = { [weak self] id in self?.networkPets.first { $0.id == id }?.url }
+        // From an app before the pet could hold the socket: the bridge keeps running its URL as it did until a pet
+        // that can hold it takes it over.
+        if !prefs.hasWebhooksThroughMac {
+            prefs.webhooksThroughMac = petWebhooks.bridgeHasOldMailbox && prefs.receivedWebhooks
+        }
         webhooks.onTell = { [weak self] tell in self?.forwardWebhook(tell) }
         webhooks.onNote = { [weak self] note in self?.log.append("-- " + note) }
         webhooks.onChange = { [weak self] in self?.onChange?() }
-        if prefs.receivesWebhooks { webhooks.start() } else { webhooks.pause() }   // paused: it stays so
+        if prefs.webhooksThroughMac { webhooks.start() } else { webhooks.pause() }
+        slack.onTell = { [weak self] tell in self?.sendSlack(tell) }
+        slack.onNote = { [weak self] note in self?.log.append("-- " + note) }
+        slack.onChange = { [weak self] in self?.onChange?() }
+        slack.wants = prefs.slackWants
+        slack.start()
         tick()
     }
 
@@ -112,12 +139,38 @@ final class Model {
         if signal == .music && !enabled { endMusic() }
     }
 
-    /// Pauses or resumes webhooks; kept across launches.
+    /// Connections › Slack: what may call the pet.
+    func setSlackWants(_ wants: SlackWants) {
+        prefs.slackWants = wants
+        slack.wants = wants
+    }
+
+    /// Pauses or resumes webhooks on the pet (on again also takes the URL back from another pet that took it).
     func setReceivingWebhooks(_ on: Bool) {
-        prefs.receivesWebhooks = on
-        log.append("-- webhooks \(on ? "received" : "paused")")
+        petWebhooks.setReceiving(on, pet: petURL) { [weak self] _ in self?.pollStatus() }
+    }
+
+    /// Saves the webhooks access key and gives the pet its keys.
+    func setWebhooksAccessKey(_ key: String) {
+        petWebhooks.setAccessKey(key, pet: mayHoldWebhooks(status) ? petURL : nil, status: status, receiving: true)
+        if prefs.webhooksThroughMac { webhooks.start() }
+    }
+
+    /// Developer › Webhooks Through This Mac.
+    func setWebhooksThroughMac(_ on: Bool) {
+        prefs.webhooksThroughMac = on
+        log.append("-- webhooks through this Mac \(on ? "on" : "off")")
         if on { webhooks.resume() } else { webhooks.pause() }
     }
+
+    /// Only the paired pet (or the one given with --device) gets the relay's keys: a pet window that answers while
+    /// the paired pet is away must not take its webhook URL.
+    private func mayHoldWebhooks(_ status: PetStatus?) -> Bool {
+        deviceOverride != nil || (status?.id != nil && status?.id == prefs.pairedID)
+    }
+
+    /// Webhooks through the pet, as the menu shows them.
+    var webhookState: PetWebhooks.State { petWebhooks.state(status, mayHold: mayHoldWebhooks(status)) }
 
     /// A verified webhook: its tell goes to the pet as it came.
     private func forwardWebhook(_ tell: Data) {
@@ -138,6 +191,15 @@ final class Model {
         PetClient.post(tell, to: base) { [weak self] status, _ in self?.log.append("\(body) -> \(status)") }
     }
 
+    private func sendSlack(_ tell: SlackTell) {
+        guard let base = petURL else {
+            log.append("-- slack: no pet found to tell")
+            return
+        }
+        let body = (try? JSONEncoder().encode(tell)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        PetClient.post(tell, to: base) { [weak self] status, _ in self?.log.append("\(body) -> \(status)") }
+    }
+
     /// Music switched off: the song's note goes at once, instead of when the song would have ended.
     private func endMusic() {
         guard let base = petURL else { return }
@@ -151,6 +213,7 @@ final class Model {
         companion.stopAndWait()
         petWindow.stopAndWait()
         webhooks.stop()
+        slack.stop()
         timer?.invalidate()
         networkWatch.stop()
         saveChildren()
@@ -203,6 +266,7 @@ final class Model {
             }.value
             isGettingKey = false
             log.append("-- pairing: \(result.paired ? "done" : result.detail)")
+            if result.paired { petWebhooks.paired() }
             onChange?()
             completion(result.paired, result.detail)
         }
@@ -266,15 +330,23 @@ final class Model {
 
     // MARK: - The pet's own state
 
+    /// Counts status requests: an answer that comes after a newer request's is old, and dropped.
+    private var statusRequest = 0
+
     func pollStatus() {
         guard let base = petURL else {
             status = nil
             return
         }
+        statusRequest += 1
+        let mine = statusRequest
         PetClient.get(PetStatus.self, "/v1", from: base) { [weak self] status in
-            guard let self else { return }
+            guard let self, mine == self.statusRequest else { return }
             self.status = status
             self.statusSource = base
+            if self.mayHoldWebhooks(status) {
+                self.petWebhooks.follow(status, pet: base, receiving: self.prefs.receivedWebhooks)
+            }
             if let pet = status?.pet, let match = self.pets.first(where: { $0.id == pet }) {
                 self.petOut = match.id
             }

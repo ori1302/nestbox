@@ -1,6 +1,6 @@
 import Foundation
 
-/// A signal the companion sends; each can be switched on or off in the Signals menu.
+/// A signal the companion sends; each can be switched on or off under Connections.
 enum ActivitySignal: String, CaseIterable {
     case keys, idle, lock, music, calendar
 
@@ -52,7 +52,11 @@ final class Preferences: @unchecked Sendable {
         static let simulatorArguments = "simulatorArgs"
         static let home = "home"
         static let petScreen = "petScreen"
-        static let receivesWebhooks = "webhooks.receive"
+        static let webhooksThroughMac = "webhooks.mac"
+        static let receivedWebhooks = "webhooks.receive"   // before the pet could hold the socket: the bridge's pause
+        static let slackDirectMessages = "slack.dms"
+        static let slackMentions = "slack.mentions"
+        static let slackThreads = "slack.threads"
 
         static func signal(_ signal: ActivitySignal) -> String { "signal." + signal.rawValue }
     }
@@ -63,14 +67,35 @@ final class Preferences: @unchecked Sendable {
         self.defaults = defaults
         let starting = ActivitySignal.allCases.map { (Key.signal($0), $0.startsOn) }
         defaults.register(defaults: Dictionary(uniqueKeysWithValues: starting))
-        defaults.register(defaults: [Key.receivesWebhooks: true])
+        defaults.register(defaults: [Key.slackDirectMessages: true, Key.slackMentions: true, Key.slackThreads: false])
     }
 
-    /// Webhooks are received (not paused); the key, URL and secret are in the keychain either way.
-    var receivesWebhooks: Bool {
-        get { defaults.bool(forKey: Key.receivesWebhooks) }
-        set { defaults.set(newValue, forKey: Key.receivesWebhooks) }
+    /// What may call the pet from Slack (the ticks under Connections › Slack).
+    var slackWants: SlackWants {
+        get {
+            SlackWants(directMessages: defaults.bool(forKey: Key.slackDirectMessages),
+                       mentions: defaults.bool(forKey: Key.slackMentions),
+                       threads: defaults.bool(forKey: Key.slackThreads))
+        }
+        set {
+            defaults.set(newValue.directMessages, forKey: Key.slackDirectMessages)
+            defaults.set(newValue.mentions, forKey: Key.slackMentions)
+            defaults.set(newValue.threads, forKey: Key.slackThreads)
+        }
     }
+
+    /// Developer › Webhooks Through This Mac: this Mac keeps a relay socket of its own (for a pet window, or a pet
+    /// whose firmware can't hold one). Off unless turned on.
+    var webhooksThroughMac: Bool {
+        get { defaults.bool(forKey: Key.webhooksThroughMac) }
+        set { defaults.set(newValue, forKey: Key.webhooksThroughMac) }
+    }
+
+    /// Whether webhooksThroughMac was ever set (an app from before it starts with the bridge as it was).
+    var hasWebhooksThroughMac: Bool { defaults.object(forKey: Key.webhooksThroughMac) != nil }
+
+    /// An older app's Receive Webhooks, for the bridge it ran: true unless the user unticked it.
+    var receivedWebhooks: Bool { defaults.object(forKey: Key.receivedWebhooks) as? Bool ?? true }
 
     func isEnabled(_ signal: ActivitySignal) -> Bool { defaults.bool(forKey: Key.signal(signal)) }
     func setEnabled(_ signal: ActivitySignal, _ enabled: Bool) { defaults.set(enabled, forKey: Key.signal(signal)) }

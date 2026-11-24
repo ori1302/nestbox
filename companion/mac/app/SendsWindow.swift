@@ -64,8 +64,14 @@ final class SendsWindow: NSObject {
             + ", and the Mac's local time."
             + (model.prefs.isEnabled(.music)
                 ? "\nMusic: the song playing, as POST \(base)/v1/tell from \"music\"." : "")
+            + (model.status?.relay?.state == "connected"
+                ? "\nWebhooks go from the relay straight to the pet, so they don't show here." : "")
             + (model.webhooks.state == .connected
-                ? "\nWebhooks: tells that came to this Mac's webhook URL with the right secret, as POST \(base)/v1/tell."
+                ? "\nWebhooks through this Mac: tells that came to this Mac's own webhook URL with the right secret, "
+                    + "as POST \(base)/v1/tell."
+                : "")
+            + (model.slack.hasTokens
+                ? "\nSlack: who wrote to you and where (never the message), as POST \(base)/v1/tell from \"slack\"."
                 : "")
             + (model.prefs.isEnabled(.calendar)
                 ? "\nCalendar: \"in a meeting\" or \"meeting soon\" with a countdown, as POST \(base)/v1/tell from \"calendar\"."

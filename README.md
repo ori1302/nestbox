@@ -10,7 +10,8 @@ anything on the internet through the optional [webhook relay](https://nestbox.pe
 It runs on a Waveshare ESP32-S3-LCD-1.69 or ESP32-S3-LCD-2 board. The same C++ engine runs in a Mac simulator that
 serves the same HTTP API, so everything here can be tried without the hardware.
 
-**Docs: [nestbox.pet/docs](https://nestbox.pet/docs/)**. This repository builds all of NestBox from source: the
+**Docs: [nestbox.pet/docs](https://nestbox.pet/docs/)**; new here, start with
+[Get started](https://nestbox.pet/docs/start/). This repository builds all of NestBox from source: the
 firmware, the simulator, the Mac companion, and the packer that turns a folder of sprite sheets into a pet.
 
 ## Try it in the simulator (macOS)
@@ -81,10 +82,12 @@ the privacy rules. Ask an agent to read `http://<device>.local/agents` and conne
 
 ## On your Mac
 
-The menu bar app (`companion/mac/app/`) runs the companion for you, and its menu adds three things: **Music** (the pet
-dances to what Spotify or Apple Music plays), **Calendar** (a countdown before a meeting, quiet during it) and
-**Webhooks** (a public URL for your pet, through the NestBox relay). See [Mac app](https://nestbox.pet/docs/mac-app/)
-and [Webhooks](https://nestbox.pet/docs/webhooks/).
+The menu bar app (`companion/mac/app/`) runs the companion for you, and its Connections menu adds four things:
+**Music** (the pet dances to what Spotify or Apple Music plays), **Calendar** (a countdown before a meeting, quiet
+during it), **Slack** (a letter and a bubble when someone writes to you or mentions you, through a Slack app of your
+own) and **Webhooks** (a public URL for your pet, through the NestBox relay). See
+[Mac app](https://nestbox.pet/docs/mac-app/), [Slack](https://nestbox.pet/docs/slack/) and
+[Webhooks](https://nestbox.pet/docs/webhooks/).
 
 ## Repository layout
 

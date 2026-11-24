@@ -119,6 +119,22 @@ enum Icon {
         return rep
     }
 
+    /// The Slack app's icon, side pixels square: the bust in paper on ink to the edges, since Slack rounds the corners
+    /// itself. Slack takes 512 to 2000 pixels.
+    static func slackIcon(side: Int = 1024) -> NSBitmapImageRep? {
+        guard let rep = bitmap(width: side, height: side) else { return nil }
+        let s = CGFloat(side) / 1024
+        draw(into: rep) {
+            ink.setFill()
+            NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side)).fill()
+            paper.setFill()
+            let frame = NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side))
+                .insetBy(dx: 250 * s, dy: 190 * s).offsetBy(dx: 20 * s, dy: -6 * s)
+            bust.path(in: frame, flipped: false).fill()
+        }
+        return rep
+    }
+
     /// Writes the iconset that iconutil turns into AppIcon.icns: 16 to 512 points, at 1x and 2x.
     static func writeAppIconSet(_ folder: String) -> Bool {
         let dir = URL(fileURLWithPath: folder)

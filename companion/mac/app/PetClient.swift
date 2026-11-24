@@ -7,6 +7,8 @@ struct PetStatus: Decodable, Equatable {
     let why: String?
     let device: String?
     let id: String?
+    /// device.relay: nil when the pet's firmware can't hold the relay's socket.
+    let relay: RelayStatus?
 
     /// A simulator: "simulator" in its device name, or an id starting with "sim-" (the companion helper's rule too).
     var isSimulator: Bool { (device?.contains("simulator") ?? false) || (id?.hasPrefix("sim-") ?? false) }
@@ -20,25 +22,28 @@ struct PetStatus: Decodable, Equatable {
     private struct Device: Decodable {
         let name: String?
         let id: String?
+        let relay: RelayStatus?
     }
 
     private enum CodingKeys: String, CodingKey {
         case now, device
     }
 
-    init(pet: String?, doing: String?, why: String?, device: String?, id: String?) {
+    init(pet: String?, doing: String?, why: String?, device: String?, id: String?, relay: RelayStatus? = nil) {
         self.pet = pet
         self.doing = doing
         self.why = why
         self.device = device
         self.id = id
+        self.relay = relay
     }
 
     init(from decoder: Decoder) throws {
         let fields = try decoder.container(keyedBy: CodingKeys.self)
         let now = try fields.decodeIfPresent(Now.self, forKey: .now)
         let device = try fields.decodeIfPresent(Device.self, forKey: .device)
-        self.init(pet: now?.pet, doing: now?.doing, why: now?.why, device: device?.name, id: device?.id)
+        self.init(pet: now?.pet, doing: now?.doing, why: now?.why, device: device?.name, id: device?.id,
+                  relay: device?.relay)
     }
 }
 
@@ -100,6 +105,7 @@ struct ForgetWiFi: Encodable {
 struct MessageReply: Decodable {
     let ok: Bool?
     let now: Now?
+    let warnings: [String]?
 
     struct Now: Decodable {
         let doing: String?
