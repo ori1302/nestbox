@@ -112,10 +112,13 @@ private:
         for (;;) {
             const uint32_t now = millis();
             if (settings_changed() || WiFi.status() != WL_CONNECTED || link_.silent(now)) return 0;
-            if (link_.should_ping(now) &&
-                esp_transport_ws_send_raw(ws_, final(WS_TRANSPORT_OPCODES_TEXT), nestbox::RELAY_PING,
-                                          int(strlen(nestbox::RELAY_PING)), IO_TIMEOUT_MS) < 0)
-                return 0;
+            if (link_.should_ping(now)) {
+                // the transport masks a frame in place, so it gets a copy it may write over, never the constant
+                std::string ping(nestbox::RELAY_PING);
+                if (esp_transport_ws_send_raw(ws_, final(WS_TRANSPORT_OPCODES_TEXT), ping.data(), int(ping.size()),
+                                              IO_TIMEOUT_MS) < 0)
+                    return 0;
+            }
             const int ready = esp_transport_poll_read(ws_, POLL_MS);
             if (ready < 0) return 0;
             if (ready == 0) continue;
