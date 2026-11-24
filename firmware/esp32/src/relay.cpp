@@ -105,6 +105,13 @@ private:
         esp_transport_close(ws_);
     }
 
+    // Sends one whole frame. The transport masks a frame in place (its const char* notwithstanding: transport_ws.c
+    // casts the const away), so it is always given a copy of its own: a constant in flash would crash the chip.
+    int send(ws_transport_opcodes_t opcode, const char* data, size_t n) {
+        std::string frame(data, n);
+        return esp_transport_ws_send_raw(ws_, final(opcode), frame.data(), int(frame.size()), IO_TIMEOUT_MS);
+    }
+
     // Reads frames until the connection ends; returns its close code (0 for a network failure or a stop).
     int serve() {
         std::string frame;
@@ -112,13 +119,9 @@ private:
         for (;;) {
             const uint32_t now = millis();
             if (settings_changed() || WiFi.status() != WL_CONNECTED || link_.silent(now)) return 0;
-            if (link_.should_ping(now)) {
-                // the transport masks a frame in place, so it gets a copy it may write over, never the constant
-                std::string ping(nestbox::RELAY_PING);
-                if (esp_transport_ws_send_raw(ws_, final(WS_TRANSPORT_OPCODES_TEXT), ping.data(), int(ping.size()),
-                                              IO_TIMEOUT_MS) < 0)
-                    return 0;
-            }
+            if (link_.should_ping(now) &&
+                send(WS_TRANSPORT_OPCODES_TEXT, nestbox::RELAY_PING, strlen(nestbox::RELAY_PING)) < 0)
+                return 0;
             const int ready = esp_transport_poll_read(ws_, POLL_MS);
             if (ready < 0) return 0;
             if (ready == 0) continue;
@@ -130,7 +133,7 @@ private:
             const int length = esp_transport_ws_get_read_payload_len(ws_);
             if (op == WS_TRANSPORT_OPCODES_CLOSE) return n >= 2 ? (uint8_t(buf[0]) << 8) | uint8_t(buf[1]) : 0;
             if (op == WS_TRANSPORT_OPCODES_PING) {
-                esp_transport_ws_send_raw(ws_, final(WS_TRANSPORT_OPCODES_PONG), buf, n, IO_TIMEOUT_MS);
+                send(WS_TRANSPORT_OPCODES_PONG, buf, size_t(n));
                 continue;
             }
             const bool keep = op == WS_TRANSPORT_OPCODES_TEXT && length <= MAX_FRAME;
