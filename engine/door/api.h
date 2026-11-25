@@ -88,6 +88,10 @@ struct Device {
     Health health;               // the platform keeps it current
     std::string relay_state;     // the relay link's word (host/relay.h), kept by the platform; "" if it has none
     bool relay_changed = false;  // the relay settings changed: the platform reconfigures its link and clears this
+    // Renaming over the network (POST /v1 {"name"}): whether the platform can take a new name, and the one asked for
+    // ("-": its own name back), which the platform takes and clears.
+    bool renames = false;
+    std::string rename_to;
     uint32_t restart_at = 0;     // a restart was asked for: the platform restarts at this time (0: none)
     uint32_t rate_second = 0;    // the rate limit's current second, and the requests in it
     int rate_count = 0;
@@ -126,6 +130,8 @@ int backlight_now(const Device& d);
 
 // Request bodies over this many bytes are refused...
 constexpr size_t MAX_BODY = 1024;
+// A device's network name, `<name>.local`: lower-case letters, digits and hyphens, 1-63, no hyphen at either end.
+bool valid_device_name(const std::string& name);
 // ...but for a pet's egg sent to PUT /v1/pets/NAME, this many.
 constexpr size_t MAX_EGG = 2 * 1024 * 1024;
 // The most body bytes a platform should read for this request: MAX_EGG for an egg, else MAX_BODY.

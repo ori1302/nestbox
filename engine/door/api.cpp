@@ -138,6 +138,8 @@ DEVICE  POST /v1 (key)
          dims or turns off (0 never); night hours or "off"; burn-in care,
          on for OLED. With nobody there, or at night, it rests sooner.
   restart true: it restarts after replying
+  name   "desk-goose": its new address is desk-goose.local ("-": its
+         own name back). A paired Mac app follows it.
   wifi   "forget": it forgets its Wi-Fi and asks for a new one
   relay  {"mailbox":..., "secret":..., "on":true}: webhooks through the
          NestBox relay (the Mac app sets them); "forget" clears them.
@@ -603,6 +605,14 @@ Response handle_device(Device& d, const ApiRequest& q) {
         any = true;
         set_relay(d, f, warnings);
     }
+    if (f.has("name")) {
+        any = true;
+        const std::string n = ascii_lower(f.str("name"));
+        if (!d.renames) warnings.push_back("this device's name can't be changed over the network");
+        else if (n != "-" && !valid_device_name(n))
+            warnings.push_back("\"name\" is lower-case letters, digits and hyphens (not at either end), up to 63");
+        else d.rename_to = n;
+    }
     if (f.has("wifi")) {
         any = true;
         if (ascii_lower(f.str("wifi")) != "forget") warnings.push_back("\"wifi\" takes only \"forget\"");
@@ -611,11 +621,12 @@ Response handle_device(Device& d, const ApiRequest& q) {
     }
     for (const auto& [k, v] : f.values)
         if (k.find('.') == std::string::npos && k != "pet" && k != "time" && k != "text" && k != "lock" && k != "key" &&
-            k != "wifi" && k != "restart" && k != "relay")
+            k != "wifi" && k != "restart" && k != "relay" && k != "name")
             warnings.push_back("unknown key \"" + k +
-                               "\"; this route takes pet, time, text, screen, wifi, restart and relay");
+                               "\"; this route takes pet, time, text, screen, name, wifi, restart and relay");
     if (!any)
-        return error_reply(d, 400, "needs \"pet\", \"time\", \"text\", \"screen\", \"wifi\", \"restart\" or \"relay\"");
+        return error_reply(d, 400,
+                           "needs \"pet\", \"time\", \"text\", \"screen\", \"name\", \"wifi\", \"restart\" or \"relay\"");
     const Look look = d.brain.decide(q.now);
     JsonWriter w;
     w.begin_object().field("ok", true);
@@ -918,6 +929,7 @@ Response serve_words(Device&, const ApiRequest&) {
         .field("text", "small, medium or large")
         .field("screen", "bright and dim (percents), dim_after and off_after (minutes, 0 never), night (\"23:00-07:00\" or \"off\"), care (true or false)")
         .field("restart", "true: restart the device")
+        .field("name", "the device's new name: lower-case letters, digits and hyphens (its address is NAME.local), or \"-\" for its own")
         .field("wifi", "\"forget\": forget the Wi-Fi and ask for a new one")
         .field("relay", "mailbox and secret (the relay's keys) and on (true or false), or \"forget\"")
         .end_object();
@@ -1077,6 +1089,11 @@ Response handle_request(Device& d, const std::string& method, const std::string&
 void wake(Device& d, uint32_t now) {
     d.active_at = now;
     d.screen_state = ScreenState::Awake;
+}
+
+bool valid_device_name(const std::string& n) {
+    if (n.empty() || n.size() > 63 || n.front() == '-' || n.back() == '-') return false;
+    return std::all_of(n.begin(), n.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'; });
 }
 
 ScreenState update_rest(Device& d, uint32_t now) {

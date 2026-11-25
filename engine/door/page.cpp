@@ -66,6 +66,8 @@ box-shadow:inset 0 0 0 1px var(--edge)}
 .ask button{min-height:40px;padding:0 16px;border-radius:999px;font-weight:600;border:1.5px solid var(--ink)}
 .ask .go{background:var(--ink);color:var(--bg)}.ask .warn{border-color:var(--warn)}
 .ask .quiet{border-color:transparent;color:var(--soft)}
+.ask input{display:block;width:100%;min-height:44px;margin:0 0 10px;padding:0 12px;font:inherit;color:var(--ink);
+background:var(--raised);border:1px solid var(--line);border-radius:6px}
 .ctl{padding:16px 0}.ctl+.ctl{border-top:1px solid var(--line)}
 .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px}.top.line{margin:0}
 .ctl label,.lb{font-weight:600}
@@ -92,7 +94,7 @@ border-radius:6px;padding:0 12px;min-height:44px}
 .list>*{display:flex;align-items:center;gap:12px;min-height:52px;padding:12px 0;border-bottom:1px solid var(--line)}
 dt{color:var(--soft);flex:1}dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .acts{display:flex;border-bottom:1px solid var(--line)}
-.do{flex:1;min-height:52px;font-weight:600}.do.warn{text-align:right}.do:disabled{opacity:.45}
+.do{min-height:52px;margin-right:24px;font-weight:600}.do.warn{margin:0 0 0 auto}.do:disabled{opacity:.45}
 .warn{color:var(--warn)}
 a.item{display:block;text-decoration:none;color:inherit}
 .item b{display:block;font-weight:600}.item span{display:block;color:var(--soft);font-size:14px}
@@ -139,7 +141,7 @@ data-l="15 min|30 min|1 hr|3 hr|6 hr|Never"></div>
 <p class=say id=screen-say role=status></p></section>
 <section><div class=head>{{This NestBox}}</div>
 <dl class=list id=facts></dl><div id=dev-ask></div>
-<div class=acts><button class=do id=restart type=button>Restart</button>
+<div class=acts><button class=do id=rename type=button>Rename</button><button class=do id=restart type=button>Restart</button>
 <button class="do warn" id=forget type=button>Forget Wi-Fi</button></div>
 <p class=say id=dev-say role=status></p></section>
 <section><div class=head>{{Connect}}</div>
@@ -208,7 +210,7 @@ const STATE = {awake: 'Awake', dim: 'Dimmed', off: 'Off'};
 function render() {
   const can = !!key;
   $('lock').hidden = can;
-  document.querySelectorAll('#screen input, #screen .seg button, #add, #edit, #restart, #forget, #pets button')
+  document.querySelectorAll('#screen input, #screen .seg button, #add, #edit, #rename, #restart, #forget, #pets button')
     .forEach(b => { b.disabled = !can; });
   $('foot').replaceChildren();
   if (can) {
@@ -394,6 +396,28 @@ $('allow').onclick = async () => {
     render(); loadPets();
   } catch (e) { $('lock-text').textContent = e.message + ' Try again.'; }
   $('allow').disabled = false;
+};
+$('rename').onclick = () => {
+  const a = el('div', 'ask'), inp = el('input'), acts = el('div'), y = el('button', 'go', 'Rename'), n = el('button', 'quiet', 'Keep');
+  inp.id = 'new-name'; inp.value = dev ? dev.name : ''; inp.autocapitalize = 'off'; inp.spellcheck = false;
+  inp.setAttribute('aria-label', 'New name');
+  y.type = n.type = 'button'; n.onclick = () => a.remove();
+  y.onclick = async () => {
+    const v = inp.value.trim().toLowerCase();
+    if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(v))
+      return say('dev-say', 'Use lower-case letters, digits and hyphens, not at either end.');
+    try {
+      const j = await api('POST', '/v1', {name: v});
+      if (j.warnings && j.warnings.length) return say('dev-say', j.warnings[0]);
+      a.remove();
+      const url = 'http://' + v + '.local/', link = el('a', '', url);
+      link.href = url;
+      $('dev-say').replaceChildren('Renamed. Its address is now ', link, '. Open it there; it asks to allow changes once more.');
+    } catch (e) { say('dev-say', e.message); }
+  };
+  acts.append(y, n); a.append(el('p', '', 'Its new name, for an address like name.local:'), inp, acts);
+  document.querySelectorAll('.ask').forEach(x => x.remove());
+  $('rename').parentNode.after(a); inp.focus(); inp.select();
 };
 $('restart').onclick = () => confirmRow($('restart').parentNode, 'Restart NestBox? It is back in about 15 seconds.',
   'Restart', async () => {

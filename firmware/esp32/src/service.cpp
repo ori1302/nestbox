@@ -46,6 +46,7 @@ void Upkeep::tick(uint32_t now) {
     last_ = now;
     const bool online = follow_wifi(now);
     sync_clock(now);
+    take_name();
     follow_host();
     report_usb_sleep(now);
     update_caption(now, online);
@@ -111,6 +112,21 @@ void Upkeep::sync_clock(uint32_t now) {
         clock_at_ = now;
         app_.update_clock();
     }
+}
+
+// A name asked for over the network (POST /v1 {"name"}), kept and taken as the console's `name` does.
+void Upkeep::take_name() {
+    std::string n;
+    app_.with_lock([&](PetCore& c) { n.swap(c.dev.rename_to); });
+    if (n.empty()) return;
+    if (n == "-") {
+        settings::remove(settings::HOST);
+        n = net::default_host();
+    } else {
+        settings::put(settings::HOST, n);
+    }
+    net::rename(n);
+    console.printf("name: now %s.local\n", n.c_str());
 }
 
 // The name changes with `name` on the console and when mDNS has to pick another; the API's pages follow it.

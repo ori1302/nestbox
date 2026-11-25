@@ -187,6 +187,28 @@ void changing_the_device() {
     check(d.call("POST", "/v1", R"({})", 14000, HOST, "", false, bearer).status == 400, "nothing to change: 400");
 }
 
+// POST /v1 {"name"}: only where the platform can take it, only a valid name, and "-" for its own.
+void renaming() {
+    Door d;
+    const std::string bearer = "Bearer " + d.pair(5000);
+    auto rename = [&](const std::string& body, uint32_t now) {
+        return json(d.call("POST", "/v1", body, now, HOST, "", false, bearer).body);
+    };
+    check(contains(rename(R"({"name":"desk-goose"})", 10000).str("warnings"), "can't be changed") &&
+              d.device.rename_to.empty(),
+          "a device that can't take a new name says so");
+    d.device.renames = true;
+    check(rename(R"({"name":"Desk-Goose"})", 11000).str("warnings") == "[]" && d.device.rename_to == "desk-goose",
+          "a new name, lower-cased, for the platform to take");
+    d.device.rename_to.clear();
+    for (const char* bad : {R"({"name":"-desk"})", R"({"name":"desk goose"})", R"({"name":""})", R"({"name":"gänse"})"})
+        check(contains(rename(bad, 12000).str("warnings"), "lower-case letters") && d.device.rename_to.empty(),
+              std::string("refused: ") + bad);
+    check(rename(R"({"name":"-"})", 13000).str("warnings") == "[]" && d.device.rename_to == "-", "\"-\": its own name back");
+    check(d.call("POST", "/v1", R"({"name":"x"})", 14000).status == 401, "renaming needs the key");
+    check(valid_device_name(std::string(63, 'a')) && !valid_device_name(std::string(64, 'a')), "up to 63 characters");
+}
+
 void reading() {
     Door d;
     d.tell(R"({"from":"claude","id":"7f3a","state":"working","line":"editing app.ts"})", 5000);
@@ -345,6 +367,7 @@ int main() {
     the_key_and_pairing();
     lock();
     changing_the_device();
+    renaming();
     reading();
     return test::summary();
 }

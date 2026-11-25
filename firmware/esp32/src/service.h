@@ -27,6 +27,7 @@ public:
 private:
     bool follow_wifi(uint32_t now);
     void sync_clock(uint32_t now);
+    void take_name();
     void follow_host();
     void report_usb_sleep(uint32_t now);
     void update_caption(uint32_t now, bool online);

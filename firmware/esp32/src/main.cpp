@@ -179,6 +179,7 @@ void load_api_settings(PetCore& core) {
 
 void show_saved_pet(PetCore& core) {
     core.dev.random = [] { return uint32_t(esp_random()); };
+    core.dev.renames = true;
     load_api_settings(core);
     put_out_first(core.dev, core.display, settings::get(settings::CHOSEN_PET), millis());
     // Pets added over the API go straight onto the shelf, and the data image only changes with a reflash: no rescan.
