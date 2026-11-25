@@ -26,6 +26,8 @@ static_assert(Brain::DAY_MS == 24 * Brain::HOUR_MS && Step::MAX_COUNT == 20 && U
 constexpr uint32_t PAIR_MS = 60 * 1000;
 constexpr size_t PET_ID_MAX = 32;
 constexpr uint32_t RESTART_DELAY_MS = 1000;  // "restart" waits this long, so the reply gets out first
+constexpr const char* SWITCH_NOTE = "switch";       // the device's note while a pet coming out is read
+constexpr uint32_t SWITCH_NOTE_MS = 10000;            // at most; it ends when the pet comes out
 constexpr uint32_t FORGET_DELAY_MS = 1000;  // "wifi": "forget" waits this long, so the reply leaves on that Wi-Fi
 constexpr size_t KEY_CHARS = 24;
 constexpr float AT_PX = 12;                 // this close to its home, it is "at" home (or its desk)
@@ -316,15 +318,31 @@ void pet_warnings(Device& d, const Fields& f, std::vector<std::string>& out) {
     }
 }
 
-// `which`: a name, "next" or "previous". Rescans the pets once for a name it doesn't know.
-bool switch_pet(Device& d, const std::string& which, uint32_t now) {
+std::string pet_names(const Shelf& s);
+
+// `which`: a name, "next" or "previous". Rescans the pets once for a name it doesn't know. Returns what went wrong,
+// or nothing.
+std::optional<std::string> switch_pet(Device& d, const std::string& which, uint32_t now) {
     size_t i;
     if (!d.shelf.find(which, i)) {
         if (d.shelf.rescan) d.shelf.rescan();
-        if (!d.shelf.find(which, i)) return false;
+        if (!d.shelf.find(which, i)) return "no pet called \"" + which + "\"; the pets are " + pet_names(d.shelf);
     }
-    if (i != d.shelf.current()) d.shelf.put_out(i, d.pet, d.screen, now);
-    return true;
+    if (!d.shelf.bring_out(i, d.pet, d.screen, now))
+        return d.shelf.id(i) + " can't be loaded; " + d.shelf.id(d.shelf.current()) + " stays out";
+    if (d.shelf.coming().empty()) {
+        d.brain.end_device(SWITCH_NOTE);
+    } else {                                           // while its egg is read, the pet out says who is coming
+        Note n;
+        n.id = SWITCH_NOTE;
+        n.state = State::On;
+        const std::string& name = d.shelf.egg(i).name;
+        n.caption = {Part<std::string>::Kind::Set, utf8_cut((name.empty() ? d.shelf.id(i) : name) + " is coming",
+                                                            Note::MAX_CAPTION)};
+        n.for_ms = SWITCH_NOTE_MS;
+        d.brain.tell_device(n, now);
+    }
+    return std::nullopt;
 }
 
 std::string pet_names(const Shelf& s) {
@@ -498,9 +516,9 @@ Response handle_device(Device& d, const ApiRequest& q) {
         any = true;
         const std::string which = ascii_lower(f.str("pet"));
         const size_t before = d.shelf.current();
-        if (!switch_pet(d, which, q.now))
-            warnings.push_back("no pet called \"" + f.str("pet") + "\"; the pets are " + pet_names(d.shelf));
-        else if ((which == "next" || which == "previous") && d.shelf.current() == before)
+        if (const std::optional<std::string> problem = switch_pet(d, which, q.now))
+            warnings.push_back(*problem);
+        else if ((which == "next" || which == "previous") && d.shelf.current() == before && d.shelf.coming().empty())
             warnings.push_back(d.shelf.id(before) + " is the only pet on this device");
     }
     if (f.has("time")) {
@@ -697,8 +715,9 @@ Response handle_input(Device& d, const ApiRequest& q) {
     if (press == "double") {
         const std::string did = d.brain.dismiss(q.now);
         if (!did.empty()) return ok(did);
-        if (!switch_pet(d, "next", q.now)) return error_reply(d, 400, "nothing to dismiss and no pet to bring out");
-        return ok("pet " + d.shelf.id(d.shelf.current()));
+        if (const std::optional<std::string> problem = switch_pet(d, "next", q.now))
+            return error_reply(d, 400, "nothing to dismiss; " + *problem);
+        return ok("pet " + (d.shelf.coming().empty() ? d.shelf.id(d.shelf.current()) : d.shelf.coming()));
     }
     return error_reply(d, 400, "needs press (single, double, long), gesture (tap, shake), boot or computer");
 }
@@ -972,6 +991,16 @@ const Device::PetChange* pet_change_to_store(Device& d, uint32_t now) {
         d.brain.end_device();
     }
     return nullptr;
+}
+
+std::string pet_to_load(const Device& d) { return d.shelf.coming(); }
+
+void finish_pet_load(Device& d, const std::string& id, Egg* egg, uint32_t now) {
+    if (id != d.shelf.coming()) return;                // another was asked for meanwhile; its turn comes next
+    d.brain.end_device(SWITCH_NOTE);
+    if (egg && d.shelf.arrive(id, std::move(*egg), d.pet, d.screen, now)) return;
+    d.shelf.give_up(id);
+    d.pet_change_done = id + ": it can't be loaded; " + d.shelf.id(d.shelf.current()) + " stays out";
 }
 
 void finish_pet_change(Device& d, const std::string& error, uint32_t now) {

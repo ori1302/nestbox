@@ -11,7 +11,7 @@
 
 namespace nestbox {
 
-const uint8_t* Scene::picture(Daypart p, float& dim) const {
+const uint8_t* SceneLayout::picture(Daypart p, float& dim) const {
     dim = 0;
     const uint8_t* own = part[int(p)];
     if (own) return own;
@@ -67,9 +67,10 @@ private:
     bool workspot(Scene& sc);
     bool swish(Scene& sc);
     bool ambient(int index, Ambient& a);
-    bool changes(const std::string& key, const Ambient& a, std::vector<Changes>& out);
-    bool frame_boxes(const std::string& k, Anim& a);
-    bool coded_frames(const std::string& k, Anim& a, const uint8_t* table);
+    bool frame_boxes(const std::string& key, const std::string& what, int fw, int fh, int rows, int frames,
+                     std::vector<FrameBox>& boxes);
+    bool coded_frames(const std::string& key, const std::string& what, int fw, int fh, int rows, int frames,
+                      std::vector<FrameBox>& boxes, const uint8_t* table);
 
     const std::vector<uint8_t>& b_;
     uint32_t len_;
@@ -116,10 +117,12 @@ bool EggReader::scene(Scene& sc) {
         return fail(error_, "the scene's size is wrong");
     const size_t size = size_t(sc.w) * sc.h;
     if (!picture("scene.pictures.day", size, true, sc.day, "the scene")) return false;
-    for (Daypart p : DAYPARTS)
+    for (Daypart p : DAYPARTS) {
         if (!picture(std::string("scene.pictures.") + daypart_key(p), size, false, sc.part[int(p)],
                      std::string("the scene's ") + daypart_key(p)))
             return false;
+        sc.has_part[int(p)] = sc.part[int(p)] != nullptr;
+    }
     for (int i = 0; i < MAX_FLOOR_POINTS; i++) {
         const std::string point = "scene.floor." + std::to_string(i) + ".";
         if (!m_.has(point + "0")) break;
@@ -183,37 +186,19 @@ bool EggReader::ambient(int index, Ambient& a) {
         return fail(error_, "an ambient part of the scene has a wrong size");
     for (int f = 0; f < a.frames; f++)
         a.durations.push_back(uint8_t(std::clamp(m_.integer(k + "durations." + std::to_string(f), 1), 1, 255)));
-    if (!changes(k + "pictures.day", a, a.day)) return false;
+    const std::string what = "an ambient part of the scene";
+    auto pictures = [&](const std::string& key, std::vector<FrameBox>& boxes) {
+        if (!m_.has(key) || frame_boxes(key, what, a.w, a.h, 1, a.frames, boxes)) return true;
+        error_ += " (eggs packed before NestBox 0.5.0 store moving parts another way: pack it again)";
+        return false;
+    };
+    if (!pictures(k + "pictures.day", a.day)) return false;
     bool any = !a.day.empty();
     for (Daypart p : DAYPARTS) {
-        if (!changes(k + "pictures." + daypart_key(p), a, a.part[int(p)])) return false;
+        if (!pictures(k + "pictures." + daypart_key(p), a.part[int(p)])) return false;
         any = any || !a.part[int(p)].empty();
     }
     return any || fail(error_, "an ambient part of the scene has no pictures");
-}
-
-// A count of changed pixels per frame (little-endian u16), then each frame's pixels in turn.
-bool EggReader::changes(const std::string& key, const Ambient& a, std::vector<Changes>& out) {
-    if (!m_.has(key)) return true;
-    const size_t table_bytes = size_t(a.frames) * 2;
-    const uint8_t* table;
-    if (!block(key, table_bytes, true, table)) return false;
-    size_t total = 0;
-    for (int f = 0; f < a.frames; f++) total += size_t(le16(table + 2 * f));
-    const uint8_t* all;
-    if (!block(key, table_bytes + total * AMBIENT_PIXEL_BYTES, true, all)) return false;
-    const uint8_t* px = all + table_bytes;
-    for (int f = 0; f < a.frames; f++) {
-        Changes c{px, le16(table + 2 * f)};
-        for (int i = 0; i < c.count; i++) {
-            const uint8_t* p = px + i * AMBIENT_PIXEL_BYTES;
-            if (p[0] >= a.w || p[1] >= a.h || !p[2] || p[2] >= colours_)
-                return fail(error_, "an ambient part of the scene changes a pixel it can't");
-        }
-        out.push_back(c);
-        px += size_t(c.count) * AMBIENT_PIXEL_BYTES;
-    }
-    return true;
 }
 
 bool EggReader::workspot(Scene& sc) {
@@ -256,53 +241,53 @@ bool EggReader::anim(int index, Anim& a) {
         return fail(error_, "animation " + a.name + " marks frames it doesn't have");
     for (int f = 0; f < a.frames; f++)                    // a frame of zero ticks would never show
         a.durations.push_back(uint8_t(std::clamp(m_.integer(k + "durations." + std::to_string(f), 1), 1, 255)));
-    a.boxes.resize(size_t(a.rows) * a.frames);
-    return frame_boxes(k, a);
+    return frame_boxes(k + "at", "animation " + a.name, a.fw, a.fh, a.rows, a.frames, a.boxes);
 }
 
-// A table of boxes (BOX_BYTES each), then the frames' run codes (coded_frames).
-bool EggReader::frame_boxes(const std::string& k, Anim& a) {
-    const size_t n = a.boxes.size(), table_bytes = n * BOX_BYTES;
+// A table of boxes (BOX_BYTES each), one per frame row by row, then the frames' run codes (coded_frames).
+bool EggReader::frame_boxes(const std::string& key, const std::string& what, int fw, int fh, int rows, int frames,
+                            std::vector<FrameBox>& boxes) {
+    const size_t n = size_t(rows) * frames, table_bytes = n * BOX_BYTES;
+    boxes.assign(n, FrameBox());
     const uint8_t* table;
-    if (!block(k + "at", table_bytes, true, table)) return false;
+    if (!block(key, table_bytes, true, table)) return false;
     for (size_t i = 0; i < n; i++) {
         const uint8_t* e = table + i * BOX_BYTES;
-        FrameBox& bx = a.boxes[i];
+        FrameBox& bx = boxes[i];
         bx.x = le16(e); bx.y = le16(e + 2); bx.w = le16(e + 4); bx.h = le16(e + 6);
-        if (bx.x + bx.w > a.fw || bx.y + bx.h > a.fh)
-            return fail(error_, "animation " + a.name + " has a frame outside its size");
+        if (bx.x + bx.w > fw || bx.y + bx.h > fh) return fail(error_, what + " has a frame outside its size");
     }
-    return coded_frames(k, a, table);
+    return coded_frames(key, what, fw, fh, rows, frames, boxes, table);
 }
 
 // After the boxes, each frame's offset in the block (u32), then the run codes; every frame is decoded once here, so
 // drawing can trust them.
-bool EggReader::coded_frames(const std::string& k, Anim& a, const uint8_t* table) {
-    const size_t n = a.boxes.size(), head = n * (BOX_BYTES + 4);
+bool EggReader::coded_frames(const std::string& key, const std::string& what, int fw, int fh, int rows, int frames,
+                             std::vector<FrameBox>& boxes, const uint8_t* table) {
+    const size_t n = boxes.size(), head = n * (BOX_BYTES + 4);
     const uint8_t* all;
-    if (!block(k + "at", head, true, all)) return false;
+    if (!block(key, head, true, all)) return false;
     const uint8_t* end = b_.data() + b_.size();
-    std::vector<uint8_t> px, whole(size_t(a.fw) * a.fh);
-    for (int r = 0; r < a.rows; r++)
-        for (int f = 0; f < a.frames; f++) {
-            const size_t i = size_t(r) * a.frames + f;
-            FrameBox& bx = a.boxes[i];
-            bx.fw = a.fw;
-            bx.fh = a.fh;
-            if (f) bx.first = &a.boxes[size_t(r) * a.frames];
+    std::vector<uint8_t> px, whole(size_t(fw) * fh);
+    for (int r = 0; r < rows; r++)
+        for (int f = 0; f < frames; f++) {
+            const size_t i = size_t(r) * frames + f;
+            FrameBox& bx = boxes[i];
+            bx.fw = fw;
+            bx.fh = fh;
+            if (f) bx.first = &boxes[size_t(r) * frames];
             else std::fill(whole.begin(), whole.end(), 0);
             if (!bx.w || !bx.h) continue;
             const size_t off = le32(table + n * BOX_BYTES + i * 4);
-            if (off < head || off >= size_t(end - all))
-                return fail(error_, "animation " + a.name + " has a frame past the file");
+            if (off < head || off >= size_t(end - all)) return fail(error_, what + " has a frame past the file");
             bx.code = all + off;
             px.resize(size_t(bx.w) * bx.h);
-            if (!decode_runs(bx.code, end, px.data(), px.size(), f ? whole.data() : nullptr, a.fw, bx.x, bx.y, bx.w,
+            if (!decode_runs(bx.code, end, px.data(), px.size(), f ? whole.data() : nullptr, fw, bx.x, bx.y, bx.w,
                              colours_))
-                return fail(error_, "animation " + a.name + " has a frame whose codes are wrong");
+                return fail(error_, what + " has a frame whose codes are wrong");
             if (f) continue;
             for (int y = 0; y < bx.h; y++)
-                std::copy_n(&px[size_t(y) * bx.w], bx.w, &whole[size_t(bx.y + y) * a.fw + bx.x]);
+                std::copy_n(&px[size_t(y) * bx.w], bx.w, &whole[size_t(bx.y + y) * fw + bx.x]);
         }
     return true;
 }
@@ -415,6 +400,52 @@ void set_screen_palette(Egg& egg, const std::vector<uint16_t>& colours) {
     for (size_t i = 1; i < egg.palette.size(); i++) egg.palette[i] = egg.screen_lut[rgb444(egg.palette[i])];
 }
 
+int idle_reach(const Egg& egg) {
+    if (egg.idle_reach >= 0 || egg.slim) return std::max(egg.idle_reach, 0);
+    const Anim* a = egg.find("Idle");
+    if (!a) return 0;
+    int reach = 0;
+    FrameCache cache;
+    for (int r = 0; r < a->rows; r++)
+        for (int f = 0; f < a->frames; f++) {
+            const FrameBox& b = pixels_of(a->box(r, f), cache);
+            for (int i = 0; i < b.w * b.h; i++)
+                if (b.px[i]) reach = std::max(reach, std::abs(2 * (b.x + i % b.w) + 1 - a->fw));
+        }
+    return reach;
+}
+
+void slim_egg(Egg& egg) {
+    if (egg.slim) return;
+    egg.idle_reach = idle_reach(egg);         // measured from its frames, which are going
+    Scene& sc = egg.scene;
+    std::vector<uint8_t> kept;
+    const size_t work = size_t(sc.work_w) * sc.work_h;
+    const uint8_t** spot[] = {&sc.work_on, &sc.work_off, &sc.work_night};
+    size_t at[3] = {};
+    for (int i = 0; i < 3; i++)
+        if (*spot[i]) {
+            at[i] = kept.size();
+            kept.insert(kept.end(), *spot[i], *spot[i] + work);
+        }
+    egg.bytes = std::move(kept);     // the file's buffer is freed here
+    for (int i = 0; i < 3; i++)
+        if (*spot[i]) *spot[i] = egg.bytes.data() + at[i];
+    sc.day = nullptr;
+    for (const uint8_t*& p : sc.part) p = nullptr;
+    sc.swish_day = sc.swish_night = nullptr;
+    for (Ambient& a : sc.ambient) {
+        std::vector<FrameBox>().swap(a.day);
+        for (auto& part : a.part) std::vector<FrameBox>().swap(part);
+    }
+    for (Anim& a : egg.anims)
+        for (FrameBox& b : a.boxes) {
+            b.px = b.code = nullptr;
+            b.w = b.h = 0;
+        }
+    egg.slim = true;
+}
+
 bool load_egg(std::vector<uint8_t> bytes, Egg& out, std::string& error) {
     out = Egg{};
     out.bytes = std::move(bytes);
@@ -451,6 +482,7 @@ bool load_egg(std::vector<uint8_t> bytes, Egg& out, std::string& error) {
         out.anims.push_back(std::move(a));
     }
     if (!out.find("Idle")) return fail(error, "the egg has no Idle animation");
+    out.idle_reach = idle_reach(out);          // measured once, here, so bringing the pet out costs nothing more
     return read_throw(m, out, error) && read_pastimes(m, out, error);
 }
 

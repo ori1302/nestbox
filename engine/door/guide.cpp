@@ -137,7 +137,7 @@ PetFacts facts_of(const Egg& e) {
     if (e.has_scene) {
         f.times.push_back("day");
         for (Daypart p : DAYPARTS)
-            if (e.scene.part[int(p)]) f.times.push_back(daypart_key(p));
+            if (e.scene.has_part[int(p)]) f.times.push_back(daypart_key(p));
     }
     for (const Anim& a : e.anims)
         f.anims.push_back({a.name, a.rows, int(ticks_to_ms(a.total_ticks())), e.note(a.name)});

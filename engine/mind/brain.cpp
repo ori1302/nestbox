@@ -154,6 +154,8 @@ void Brain::end_device() {
         i = part_of(i->first, DEVICE_SENDER) ? notes_.erase(i) : std::next(i);
 }
 
+void Brain::end_device(const std::string& id) { notes_.erase(key_of(std::string(DEVICE_SENDER) + "/" + id)); }
+
 // Open-ended steps take their time from the note: 10 s in a list, the note's time in a moment, for as long as the
 // note lasts in a lasting state, where the steps repeat.
 void Brain::finish_steps(Kept& k, uint32_t now) {

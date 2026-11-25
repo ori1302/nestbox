@@ -34,26 +34,10 @@ struct Anim {
     }
 };
 
-// One frame of an ambient part: the pixels it changes in the scene picture, AMBIENT_PIXEL_BYTES each (x and y
-// inside the part, then a palette index).
-constexpr int AMBIENT_PIXEL_BYTES = 3;
-struct Changes {
-    const uint8_t* px = nullptr;
-    int count = 0;
-
-    // The palette index it puts at (x, y), or 0 if it leaves the scene there.
-    uint8_t at(int x, int y) const {
-        for (int i = 0; i < count; i++) {
-            const uint8_t* p = px + i * AMBIENT_PIXEL_BYTES;
-            if (p[0] == x && p[1] == y) return p[2];
-        }
-        return 0;
-    }
-};
-
 // A small part of a scene that moves on its own (falling water, a flickering lamp): frames of changes to
-// the scene picture, one set per scene picture it belongs to. It plays only while the scene shows a picture it has
-// frames for, so it always matches what is around it.
+// the scene picture, one set per scene picture it belongs to. A frame is coded like an animation's (FrameBox), its
+// pixels the palette indices it puts in the scene; index 0 leaves the scene as it is. It plays only while the scene
+// shows a picture it has frames for, so it always matches what is around it.
 struct Ambient {
     // Always: it moves all the time. Loop, Once: it shows only while a pastime's step shows it, from that step's start
     // (steps in a row that show it keep it going from the first), over and over, or once and then holding its last
@@ -67,20 +51,22 @@ struct Ambient {
     int w = 0, h = 0, x = 0, y = 0;      // its size and top-left corner, in scene picture pixels
     int frames = 0;
     std::vector<uint8_t> durations;      // ticks (1/TICKS_PER_S s) per frame
-    std::vector<Changes> day;            // one per frame; empty: none for this picture
-    std::vector<Changes> part[4];        // for the scene's morning, afternoon, evening and night pictures
+    std::vector<FrameBox> day;           // one per frame, inside its w x h box; empty: none for this picture
+    std::vector<FrameBox> part[4];       // for the scene's morning, afternoon, evening and night pictures
 
     // The frame showing `tick` ticks into its loop, and one loop's length.
     int frame_at(uint64_t tick) const { return nestbox::frame_at(durations.data(), frames, int64_t(tick)); }
     int total_ticks() const { int t = 0; for (auto d : durations) t += d; return t; }
 };
 
-// A pet's own scene: full-screen pictures and the area it may walk on. Coordinates are the pictures' pixels.
-struct Scene {
+// A pet's own scene, but for its moving parts: full-screen pictures and the area it may walk on. Coordinates are the
+// pictures' pixels.
+struct SceneLayout {
     int w = 0, h = 0;                    // the pictures' size in their own pixels
     int scale = 1;                       // screen pixels per picture pixel (2: drawn at 2x pixels)
     const uint8_t* day = nullptr;        // the main picture, w * h palette indices
     const uint8_t* part[4] = {};         // optional pictures for the morning, afternoon, evening and night
+    bool has_part[4] = {};               // which of them it has (kept when the egg is slim)
     std::vector<std::pair<int, int>> floor;   // polygon; empty = the whole floor
     std::vector<std::vector<std::pair<int, int>>> blocked;   // optional polygons inside the floor it may not stand on
     std::vector<std::pair<int, int>> water;   // optional polygon a pastime may swim in (its steps "swim" and "jump")
@@ -102,14 +88,13 @@ struct Scene {
     int swish_w = 0, swish_h = 0, swish_x = 0, swish_y = 0;
     const uint8_t* swish_day = nullptr;       // swish_w * swish_h palette indices, 0 = transparent
     const uint8_t* swish_night = nullptr;     // optional; else `day`, dimmed
-    std::vector<Ambient> ambient;             // optional; positions stay in picture pixels
 
     // The picture for a time of day: its own, else the nearest it has (morning and afternoon: the main
     // picture; evening: the night picture; night: the main picture dimmed). `dim` says how much to dim it.
     const uint8_t* picture(Daypart p, float& dim) const;
     // An ambient part's frames that belong with the scene picture `pic`; null if it has none for it.
-    const std::vector<Changes>* frames_for(const Ambient& a, const uint8_t* pic) const {
-        const std::vector<Changes>* f = nullptr;
+    const std::vector<FrameBox>* frames_for(const Ambient& a, const uint8_t* pic) const {
+        const std::vector<FrameBox>* f = nullptr;
         if (pic && pic == day) f = &a.day;
         for (int i = 0; i < 4 && !f; i++)
             if (pic && pic == part[i]) f = &a.part[i];
@@ -136,6 +121,12 @@ struct Scene {
                     yj = float(poly[j].second);
         return (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi;
     }
+};
+
+// The scene with its moving parts. A stage keeps a copy of the layout only: the parts' frame tables are most of a
+// scene's memory, and the pet draws them from the egg's own.
+struct Scene : SceneLayout {
+    std::vector<Ambient> ambient;             // optional; positions stay in picture pixels
 };
 
 // How the item flies once thrown: through the target and back to be caught (a hoop), into the target and gone
@@ -197,6 +188,10 @@ struct Egg {
     std::vector<Pastime> pastimes;           // its own free-time doings, from the pet folder's "free_time"
     std::vector<Anim> anims;
     std::vector<uint8_t> bytes;      // the whole file; pictures and frames point into it
+    // Kept without its pictures and frames (slim_egg) while it is not out: everything else stays, so it can be listed
+    // and described, but it can't be drawn.
+    bool slim = false;
+    int idle_reach = -1;             // idle_reach(), measured when it is read (-1: not yet); a slim egg keeps it
 
     const Anim* find(const std::string& n) const {
         for (auto& a : anims) if (a.name == n) return &a;
@@ -208,6 +203,13 @@ struct Egg {
         return a || anims.empty() ? a : &anims[0];
     }
 };
+
+// How far Idle's farthest pixel is from the middle of its frame, in half pixels of the pet's own art; 0 without Idle.
+int idle_reach(const Egg& egg);
+
+// Drops what only drawing the pet needs (its scene pictures, moving parts, swish and frames) and keeps the rest,
+// including its work spot (the desk's place is measured on it): a shelf keeps the pets that are not out this way.
+void slim_egg(Egg& egg);
 
 // Reads an egg from its bytes. Returns false and fills `error` if the data is not a valid egg.
 bool load_egg(std::vector<uint8_t> bytes, Egg& out, std::string& error);

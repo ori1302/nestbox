@@ -5,6 +5,7 @@
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <algorithm>
+#include <functional>
 #include <string>
 #include <vector>
 #include "app.h"
@@ -62,7 +63,48 @@ void hold_power() {
     digitalWrite(board::BUZZER, LOW);
 }
 
-void load_egg_files(Shelf& shelf) {
+// Runs a step that allocates an egg's memory with every allocation in PSRAM. An egg is also many small tables (each
+// animation's frames, the scene's parts), and malloc puts anything under CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL bytes in
+// internal RAM, which the tasks' stacks and Wi-Fi need; with a full shelf no task could start.
+void in_psram(const std::function<void()>& step) {
+    heap_caps_malloc_extmem_enable(1);
+    step();
+    heap_caps_malloc_extmem_enable(CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL);
+}
+
+// One egg file read whole and checked.
+bool read_egg(const std::string& name, Egg& egg) {
+    File f = LittleFS.open(("/" + name).c_str());
+    if (!f) {
+        console.printf("pets: cannot open %s\n", name.c_str());
+        return false;
+    }
+    const size_t size = f.size(), room = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+    if (size + board::PSRAM_SPARE > room) {
+        console.printf("pets: skipping %s (%u KB): only %u KB of PSRAM left\n", name.c_str(), unsigned(size / 1024),
+                       unsigned(room / 1024));
+        return false;
+    }
+    std::vector<uint8_t> bytes(size);
+    std::string err;
+    const uint32_t start = millis();
+    if (f.read(bytes.data(), size) != size) err = "cannot read it";
+    const uint32_t read_ms = millis() - start;
+    if (err.empty()) load_egg(std::move(bytes), egg, err);
+    if (!err.empty()) console.printf("pets: skipping %s: %s\n", name.c_str(), err.c_str());
+    else console.printf("pets: %s read in %u ms, checked in %u ms\n", name.c_str(), unsigned(read_ms),
+                        unsigned(millis() - start - read_ms));
+    return err.empty();
+}
+
+// Every egg in the data image, in shelf order. Only the pet that is out stays whole in PSRAM: the others are kept
+// slim and read again when they come out, so the pets' flash, not PSRAM, limits how many there are. Reading one
+// takes about a second a megabyte, so a pet asked for is read by the service task, outside the lock, while the pet
+// out keeps moving (Shelf::load_later).
+void load_eggs(Shelf& shelf) {
+    shelf.egg_memory = in_psram;
+    shelf.load_later = true;
+    shelf.load = [](const std::string& id, Egg& egg) { return read_egg(id + nestbox::EGG_EXTENSION, egg); };
     std::vector<std::string> files, unfinished;
     File dir = LittleFS.open("/");
     for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
@@ -71,38 +113,12 @@ void load_egg_files(Shelf& shelf) {
     }
     for (const std::string& name : unfinished) LittleFS.remove(("/" + name).c_str());   // power lost mid-write
     std::sort(files.begin(), files.end(), egg_file_before);
-    for (const std::string& name : files) {
-        File f = LittleFS.open(("/" + name).c_str());
-        const size_t size = f.size(), room = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
-        if (size + board::PSRAM_SPARE > room) {
-            console.printf("pets: skipping %s (%u KB): only %u KB of PSRAM left\n", name.c_str(), unsigned(size / 1024),
-                           unsigned(room / 1024));
-            continue;
-        }
-        std::vector<uint8_t> bytes(size);
-        if (f.read(bytes.data(), size) != size) {
-            console.printf("pets: cannot read %s\n", name.c_str());
-            continue;
-        }
-        Egg egg;
-        std::string err;
-        if (!load_egg(std::move(bytes), egg, err)) {
-            console.printf("pets: skipping %s: %s\n", name.c_str(), err.c_str());
-            continue;
-        }
-        console.printf("pets: %s (%u KB)\n", egg.name.c_str(), unsigned(size / 1024));
-        shelf.add(std::move(egg), egg_id(name));
-    }
-}
-
-// Every egg in the data image, in shelf order, each read whole into PSRAM. An egg is also many small tables (each
-// animation's frames, the scene's parts), and malloc puts anything under CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL bytes in
-// internal RAM, which the tasks' stacks and Wi-Fi need; with a full shelf no task could start. So while the eggs
-// load, every allocation goes to PSRAM.
-void load_eggs(Shelf& shelf) {
-    heap_caps_malloc_extmem_enable(1);
-    load_egg_files(shelf);
-    heap_caps_malloc_extmem_enable(CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL);
+    for (const std::string& name : files)
+        in_psram([&] {
+            Egg egg;
+            if (!read_egg(name, egg)) return;
+            shelf.add(std::move(egg), egg_id(name));
+        });
 }
 
 // Without eggs there is no pet: the screen says how to flash them, and the console keeps working.

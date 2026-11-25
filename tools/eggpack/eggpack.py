@@ -757,17 +757,13 @@ def pack_scene(folder, scene, palette):
 
 
 def pack_ambient(folder, part, palette):
-    """A moving part of the scene: {w, h, x, y, frames, durations, pictures}. Each picture is the pixels its
-    frames change: a count per frame (16-bit), then each frame's pixels as x, y and palette index."""
+    """A moving part of the scene: {w, h, x, y, frames, durations, pictures}. Each picture is its frames' palette
+    indices one frame after another (0: the scene shows there), for eggformat to code like an animation's."""
     n = part['frames']
     strips, (w, h) = pack_pictures(folder, part, AMBIENT_PICTURES, 'scene ambient', palette, opaque=False)
     fw = w // n
-    pictures = {}
-    for key, strip in strips.items():
-        frames = [[(x, y, strip[y * w + f * fw + x]) for y in range(h) for x in range(fw) if strip[y * w + f * fw + x]]
-                  for f in range(n)]
-        pictures[key] = (b''.join(struct.pack('<H', len(f)) for f in frames) +
-                         bytes(v for f in frames for px in f for v in px))
+    pictures = {key: bytes(strip[y * w + f * fw + x] for f in range(n) for y in range(h) for x in range(fw))
+                for key, strip in strips.items()}
     fill = palette.index(tuple(part['fill']) + (255,)) if part.get('fill') else 0
     return {'name': part.get('name', ''), 'cue': part.get('cue', ''), 'during': part.get('during', ''), 'fill': fill,
             'w': fw, 'h': h,

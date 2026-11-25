@@ -29,8 +29,8 @@ A pet here is a dict:
                                     w, h, x, y, frames,
                                     durations: [...],
                                     pictures: {day, morning, afternoon, evening, night: bytes}}]}
-                                    (each ambient picture is a 16-bit count per frame, then each frame's
-                                    changed pixels as x, y and palette index)
+                                    (each ambient picture is its frames' palette indices, w x h each, one
+                                    after another; 0 leaves the scene as it is. Written coded, as frames are)
   anims        [{name, w, h, rows, frames, rush, hit, return, dash, durations: [...], data: bytes}, ...]
 """
 import json
@@ -89,10 +89,10 @@ def code(px, base=None):
 
 
 def coded(a):
-    """An animation's frames, each cut to the box that has pixels in it and stored as run codes: a table of
-    (x, y, w, h) as 16-bit numbers, one per frame row by row, then each frame's offset in the block (32-bit), then
-    the codes. A frame after a row's first is coded against that first frame where that is shorter, and frames
-    that come out the same share their codes."""
+    """Frames (an animation's, or a scene part's as one row), each cut to the box that has pixels in it and stored
+    as run codes: a table of (x, y, w, h) as 16-bit numbers, one per frame row by row, then each frame's offset in the
+    block (32-bit), then the codes. A frame after a row's first is coded against that first frame where that is
+    shorter, and frames that come out the same share their codes."""
     w, h, data, rows, frames = a['w'], a['h'], a['data'], a['rows'], a['frames']
     n = rows * frames
     table, offsets, body = bytearray(), [], bytearray()
@@ -186,7 +186,10 @@ def describe_scene(sc, blocks):
                          **({'fill': a['fill']} if a.get('fill') else {}),
                          **({'during': a['during']} if a.get('during') else {}),
                          'w': a['w'], 'h': a['h'], 'x': a['x'], 'y': a['y'], 'frames': a['frames'],
-                         'durations': a['durations'], 'pictures': describe_pictures(a['pictures'], DAYPARTS, blocks)}
+                         'durations': a['durations'],
+                         'pictures': {key: blocks.place(coded({'w': a['w'], 'h': a['h'], 'rows': 1,
+                                                               'frames': a['frames'], 'data': a['pictures'][key]}))
+                                      for key in DAYPARTS if a['pictures'].get(key)}}
                         for a in sc['ambient']]
     return s
 

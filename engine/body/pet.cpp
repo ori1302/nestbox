@@ -79,6 +79,7 @@ void Pet::set_egg(const Egg* egg) {
     egg_ = egg;
     frame_cache_ = FrameCache();
     item_cache_ = FrameCache();
+    part_cache_.clear();
     room_ = Room();
     desk_ = Desk();
     stage_.set_egg(egg);

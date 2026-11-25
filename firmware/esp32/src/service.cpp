@@ -1,5 +1,6 @@
 #include "service.h"
 #include <Arduino.h>
+#include <functional>
 #include <LittleFS.h>
 #include <WiFi.h>
 #include "console.h"
@@ -35,6 +36,7 @@ void service_task(void* arg) {
         const uint32_t now = millis();
         app.radio.tick(now);
         upkeep.tick(now);
+        upkeep.load_coming_pet();
         vTaskDelay(pdMS_TO_TICKS(LOOP_MS));
     }
 }
@@ -127,13 +129,15 @@ void Upkeep::update_caption(uint32_t now, bool online) {
 }
 
 // A pet added over the API goes into the pets' flash here, outside the lock (the change it comes from holds still
-// until it is finished), then onto the shelf; one taken off is deleted, then taken off the shelf.
+// until it is finished), then onto the shelf. One taken off comes off the shelf first, then its file is deleted: if
+// the pet out can't make way (the next pet can't be loaded), its file stays.
 void Upkeep::store_pet_change(uint32_t now) {
     using Kind = nestbox::Device::PetChange::Kind;
     Kind kind = Kind::None;
-    std::string id;
+    std::string id, done;
     const uint8_t* bytes = nullptr;
     size_t size = 0;
+    bool removed = false;
     app_.with_lock([&](PetCore& c) {
         const nestbox::Device::PetChange* p = nestbox::pet_change_to_store(c.dev, now);
         if (!p) return;
@@ -141,33 +145,56 @@ void Upkeep::store_pet_change(uint32_t now) {
         id = p->id;
         bytes = p->egg.bytes.data();
         size = p->egg.bytes.size();
+        if (kind != Kind::Remove) return;
+        nestbox::finish_pet_change(c.dev, "", millis());
+        removed = !c.shelf.has(id);
+        done = c.dev.pet_change_done;
     });
     if (kind == Kind::None) return;
     const std::string path = "/" + id + nestbox::EGG_EXTENSION, part = path + nestbox::PART_SUFFIX;
-    std::string error;
     if (kind == Kind::Remove) {
-        if (LittleFS.exists(path.c_str()) && !LittleFS.remove(path.c_str())) error = "its file can't be deleted";
+        if (removed && LittleFS.exists(path.c_str()) && !LittleFS.remove(path.c_str()))
+            done += " (its file can't be deleted: it is back after a restart)";
+        console.printf("pets: %s\n", done.c_str());
+        return;
+    }
+    std::string error;
+    const size_t free = LittleFS.totalBytes() - LittleFS.usedBytes();
+    if (size + FLASH_SPARE > free) {
+        error = "no room left: " + std::to_string(size / 1024) + " KB needed, " + std::to_string(free / 1024) +
+                " KB free; take another pet off first";
     } else {
-        const size_t free = LittleFS.totalBytes() - LittleFS.usedBytes();
-        if (size + FLASH_SPARE > free) {
-            error = "no room left: " + std::to_string(size / 1024) + " KB needed, " + std::to_string(free / 1024) +
-                    " KB free; take another pet off first";
-        } else {
-            File f = LittleFS.open(part.c_str(), "w");
-            const size_t written = f ? f.write(bytes, size) : 0;
-            if (f) f.close();
-            if (written != size || !LittleFS.rename(part.c_str(), path.c_str())) {
-                LittleFS.remove(part.c_str());
-                error = "its file can't be written";
-            }
+        File f = LittleFS.open(part.c_str(), "w");
+        const size_t written = f ? f.write(bytes, size) : 0;
+        if (f) f.close();
+        if (written != size || !LittleFS.rename(part.c_str(), path.c_str())) {
+            LittleFS.remove(part.c_str());
+            error = "its file can't be written";
         }
     }
-    std::string done;
     app_.with_lock([&](PetCore& c) {
         nestbox::finish_pet_change(c.dev, error, millis());
         done = c.dev.pet_change_done;
     });
     console.printf("pets: %s\n", done.c_str());
+}
+
+void Upkeep::load_coming_pet() {
+    std::string id;
+    std::function<bool(const std::string&, nestbox::Egg&)> load;
+    std::function<void(const std::function<void()>&)> in_memory;
+    app_.with_lock([&](PetCore& c) {
+        id = nestbox::pet_to_load(c.dev);
+        load = c.shelf.load;
+        in_memory = c.shelf.egg_memory;
+    });
+    if (id.empty() || !load) return;
+    nestbox::Egg egg;
+    bool read = false;
+    const auto step = [&] { read = load(id, egg); };
+    if (in_memory) in_memory(step);
+    else step();
+    app_.with_lock([&](PetCore& c) { nestbox::finish_pet_load(c.dev, id, read ? &egg : nullptr, millis()); });
 }
 
 void Upkeep::save_changed_pet() {

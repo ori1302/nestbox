@@ -59,6 +59,8 @@ public:
     // A note from the device itself (pairing asks the user); not reachable from the network.
     void tell_device(const Note& n, uint32_t now_ms);
     void end_device();
+    // Ends one of them, by its id.
+    void end_device(const std::string& id);
 
     // A report from a source of activity; returns its warnings.
     std::vector<std::string> user(const Fields& f, uint32_t now_ms) { return user_.report(f, now_ms); }

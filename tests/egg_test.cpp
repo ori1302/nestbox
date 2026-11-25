@@ -6,6 +6,7 @@
 #include "body/pet.h"
 #include "check.h"
 #include "screen/canvas.h"
+#include "util/json.h"
 
 using namespace nestbox;
 using test::check;
@@ -182,13 +183,29 @@ void ambient(const Scene& s) {
           "the lights: frames only for the night picture");
     check(s.frames_for(fall, s.day + 1) == nullptr, "none for a picture it has no frames for");
     bool changes = true;
-    for (const Changes& c : fall.day) changes = changes && c.count > 0 && c.count <= fall.w * fall.h;
+    for (const FrameBox& b : fall.day)
+        changes = changes && b.code && b.w > 0 && b.h > 0 && b.x + b.w <= fall.w && b.y + b.h <= fall.h;
     check(changes, "each waterfall frame changes some of its pixels");
     int total = 0;
     for (auto d : fall.durations) total += d;
     check(fall.frame_at(0) == 0 && fall.frame_at(fall.durations[0]) == 1 && fall.frame_at(uint64_t(total)) == 0 &&
               fall.frame_at(uint64_t(total) * 1000 + fall.durations[0] - 1) == 0,
           "frames follow their durations and loop");
+}
+
+// A part whose frames don't read, as an egg's packed before 0.5.0 (lists of changed pixels), says what to do.
+void parts_that_dont_read(const std::vector<uint8_t>& moving) {
+    const size_t len = size_t(moving[4]) | size_t(moving[5]) << 8 | size_t(moving[6]) << 16 | size_t(moving[7]) << 24;
+    Fields m;
+    if (!check(parse_json(std::string(moving.begin() + 8, moving.begin() + 8 + long(len)), m), "its description reads"))
+        return;
+    std::vector<uint8_t> b = moving;
+    const size_t at = size_t(m.num("scene.ambient.0.pictures.day"));
+    b[at + 4] = b[at + 5] = 0xFF;               // its first frame's box, wider than the part
+    Egg e;
+    std::string why;
+    check(!load_egg(b, e, why) && why.find("pack it again") != std::string::npos,
+          "a part whose frames don't read is refused, and the reason says to pack it again");
 }
 
 // A cued part is drawn only while a step shows it, from the step's start, and holds its last frame once played.
@@ -267,6 +284,7 @@ int main(int argc, char** argv) {
             ambient(m.scene);
             if (m.scene.ambient.size() == 4) cued(m);
         }
+        parts_that_dont_read(moving);
     }
     gauges(bytes, e);
     broken_files(bytes);

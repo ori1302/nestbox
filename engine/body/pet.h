@@ -290,6 +290,7 @@ private:
     uint32_t last_ms_ = 0;
     mutable FrameCache frame_cache_;      // the frame drawn last, its codes decoded
     mutable FrameCache item_cache_;       // and the thrown item's
+    mutable std::vector<FrameCache> part_cache_;   // two per scene part: its frame now, and the one it fades from
     std::string shown_part_;             // the cued scene part a step shows, and since when
     uint32_t shown_since_ = 0;
     // Swimming and jumping (a pastime's steps): a jump flies its straight way in an arc; out of the water after an

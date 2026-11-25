@@ -156,13 +156,19 @@ void Pet::draw_ambient(Canvas& c, const std::vector<uint16_t>& colours,
     const int s = stage_.scene_scale();
     const uint64_t tick = uint64_t(last_ms_) * TICKS_PER_S / 1000;
     const bool fading = fade_ < 1;
-    for (const Ambient& a : sc.ambient) {
+    const std::vector<Ambient>& parts = egg_->scene.ambient;
+    if (part_cache_.size() < parts.size() * 2) part_cache_.resize(parts.size() * 2);
+    for (const Ambient& a : parts) {
+        const size_t n = size_t(&a - parts.data());
+        FrameCache &now_cache = part_cache_[2 * n], &before_cache = part_cache_[2 * n + 1];
         // A cued part only while a step shows it, or while the look it goes with plays (from when it began).
         const bool with_look = !a.during.empty() && want_ != Look::Act && phase_ == Phase::Acting &&
                                a.during == look_key(look_now());
-        if (a.cue != Ambient::Cue::Always && a.name != shown_part_ && !with_look) continue;
-        const std::vector<Changes>* to = sc.frames_for(a, pic_);
-        const std::vector<Changes>* from = fading ? sc.frames_for(a, pic_from_) : nullptr;
+        const bool shown = a.cue == Ambient::Cue::Always || a.name == shown_part_ || with_look;
+        const std::vector<FrameBox>* to = shown ? sc.frames_for(a, pic_) : nullptr;
+        const std::vector<FrameBox>* from = shown && fading ? sc.frames_for(a, pic_from_) : nullptr;
+        if (!to && now_cache.frame) now_cache = FrameCache();        // a part that stopped lets its frames go
+        if (!from && before_cache.frame) before_cache = FrameCache();
         if (!to && !from) continue;
         int f = a.frame_at(tick);
         if (a.cue != Ambient::Cue::Always) {
@@ -170,6 +176,13 @@ void Pet::draw_ambient(Canvas& c, const std::vector<uint16_t>& colours,
             const uint64_t since = uint64_t(last_ms_ - cue_from) * TICKS_PER_S / 1000;
             f = a.cue == Ambient::Cue::Once && since >= uint64_t(a.total_ticks()) ? a.frames - 1 : a.frame_at(since);
         }
+        const FrameBox* now = to ? &pixels_of((*to)[f], now_cache) : nullptr;
+        const FrameBox* before = from ? &pixels_of((*from)[f], before_cache) : nullptr;
+        // A decoded frame's index at (x, y) of the part; 0 outside its box.
+        auto at = [](const FrameBox* b, int x, int y) -> uint8_t {
+            if (!b || x < b->x || y < b->y || x >= b->x + b->w || y >= b->y + b->h) return 0;
+            return b->px[size_t(y - b->y) * b->w + size_t(x - b->x)];
+        };
         // A changed pixel: the frame's index for each picture where it has one, else that picture's own.
         auto put = [&](int x, int y, uint8_t k, uint8_t k_from) {
             const int px = a.x + x, py = a.y + y;
@@ -179,7 +192,7 @@ void Pet::draw_ambient(Canvas& c, const std::vector<uint16_t>& colours,
             if (fading) p = mix(from_colours[k_from ? k_from : pic_from_[i]], p, fade_);
             c.rect(px * s - stage_.scene_x(), py * s - stage_.scene_y(), s, s, p);
         };
-        if (a.fill && to && (*to)[f].count) {          // its box filled first (a screen's dark), then what is on it
+        if (a.fill && now && now->w && now->h) {          // its box filled first (a screen's dark), then what is on it
             uint16_t p = colours[a.fill];
             if (fading) p = mix(from_colours[a.fill], p, fade_);
             for (int y = 0; y < a.h; y++)
@@ -189,16 +202,14 @@ void Pet::draw_ambient(Canvas& c, const std::vector<uint16_t>& colours,
                         c.rect(px * s - stage_.scene_x(), py * s - stage_.scene_y(), s, s, p);
                 }
         }
-        if (to)
-            for (int n = 0; n < (*to)[f].count; n++) {
-                const uint8_t* p = (*to)[f].px + n * AMBIENT_PIXEL_BYTES;
-                put(p[0], p[1], p[2], from ? (*from)[f].at(p[0], p[1]) : 0);
-            }
-        if (from)
-            for (int n = 0; n < (*from)[f].count; n++) {
-                const uint8_t* p = (*from)[f].px + n * AMBIENT_PIXEL_BYTES;
-                if (!to || !(*to)[f].at(p[0], p[1])) put(p[0], p[1], 0, p[2]);
-            }
+        if (now)
+            for (int y = now->y; y < now->y + now->h; y++)
+                for (int x = now->x; x < now->x + now->w; x++)
+                    if (const uint8_t k = at(now, x, y)) put(x, y, k, at(before, x, y));
+        if (before)
+            for (int y = before->y; y < before->y + before->h; y++)
+                for (int x = before->x; x < before->x + before->w; x++)
+                    if (const uint8_t k = at(before, x, y); k && !at(now, x, y)) put(x, y, 0, k);
     }
 }
 

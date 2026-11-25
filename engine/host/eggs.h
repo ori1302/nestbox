@@ -17,8 +17,8 @@ std::string egg_id(const std::string& file_name);
 // Shelf order for egg file names: the default pet first, then by name.
 bool egg_file_before(const std::string& a, const std::string& b);
 
-// Shows the pet last chosen (`saved_id`; the first on the shelf if it is gone) on display `display`, fading in
-// from what d.screen holds. The shelf must not be empty.
+// Shows the pet last chosen (`saved_id`; the first on the shelf if it is gone, and the next one if it can't be
+// loaded) on display `display`, fading in from what d.screen holds. The shelf must not be empty.
 void put_out_first(Device& d, const Display& display, const std::string& saved_id, uint32_t now_ms);
 
 }  // namespace nestbox

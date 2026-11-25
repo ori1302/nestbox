@@ -109,6 +109,11 @@ const Device::PetChange* pet_change_to_store(Device& d, uint32_t now_ms);
 // The platform wrote (or deleted) the file; `error` is "" or why it couldn't. Puts the pet on the shelf (or takes
 // it off) and ends the change.
 void finish_pet_change(Device& d, const std::string& error, uint32_t now_ms);
+// For a platform whose shelf loads later (Shelf::load_later): the id of the pet asked to come out, whose egg it is
+// to read now, outside its lock; empty when none.
+std::string pet_to_load(const Device& d);
+// Its egg, read (nullptr: it couldn't be): the pet comes out, or the pet out stays and GET /v1/pets says why.
+void finish_pet_load(Device& d, const std::string& id, Egg* egg, uint32_t now_ms);
 
 // Something happened that someone would want to see: the screen wakes and its rest starts over.
 void wake(Device& d, uint32_t now_ms);

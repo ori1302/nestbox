@@ -19,7 +19,8 @@ void put_out_first(Device& d, const Display& display, const std::string& saved_i
     size_t first = 0;
     d.shelf.find(saved_id, first);
     d.pet.set_display(display);
-    d.shelf.put_out(first, d.pet, d.screen, now);
+    for (size_t k = 0; k < d.shelf.size(); k++)          // the saved pet, else the next one that loads
+        if (d.shelf.put_out((first + k) % d.shelf.size(), d.pet, d.screen, now)) return;
 }
 
 }  // namespace nestbox

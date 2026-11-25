@@ -218,11 +218,11 @@ def ambient_checked(tmp):
         with open(egg, 'rb') as f:
             b = f.read()
         at = part['pictures']['night']
-        counts = struct.unpack('<3H', b[at:at + 6])
-        pixels = [tuple(b[at + 6 + i * 3:at + 9 + i * 3]) for i in range(counts[1])]
-        check(counts == (0, 8, 0) and sorted((x, y) for x, y, _ in pixels) == [(x, y) for x in (0, 1) for y in range(4)]
-              and len({k for _, _, k in pixels}) == 1 and pixels[0][2] > 0,
-              'only the pixels its frames change, frame by frame')
+        boxes = [struct.unpack('<4H', b[at + 8 * i:at + 8 * i + 8]) for i in range(3)]
+        lit_at = struct.unpack('<I', b[at + 24 + 4:at + 24 + 8])[0]
+        runs = b[at + lit_at:at + lit_at + 2]
+        check(boxes == [(0, 0, 0, 0), (0, 0, 2, 4), (0, 0, 0, 0)] and runs[0] == 0x80 | (8 - 2) and runs[1] > 0,
+              'only the pixels its frames change, frame by frame, coded as frames are')
     meta['scene']['ambient'][0]['day'] = 'lamp.png'
     json.dump(meta, open(meta_path, 'w'))
     alone = os.path.getsize(egg)

@@ -39,6 +39,9 @@ Egg with_zoomies(const Egg& e, int rows) {
         run.rows = rows;
     }
     z.anims.push_back(run);
+    Anim& added = z.anims.back();        // a copy's frames still point at the first frames they were copied from
+    for (size_t i = 0; i < added.boxes.size(); i++)
+        if (added.boxes[i].first) added.boxes[i].first = &added.boxes[i / size_t(added.frames) * size_t(added.frames)];
     return z;
 }
 

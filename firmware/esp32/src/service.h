@@ -21,6 +21,8 @@ public:
 
     explicit Upkeep(App& app) : app_(app) {}
     void tick(uint32_t now_ms);
+    // A pet asked to come out is read here, outside the lock, so the pet out keeps moving meanwhile; then it comes out.
+    void load_coming_pet();
 
 private:
     bool follow_wifi(uint32_t now);

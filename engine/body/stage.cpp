@@ -112,7 +112,7 @@ void Stage::set_egg(const Egg* egg) {
 // its author wants in view needs (else around the home), or centred with its edges carried on when it is smaller;
 // everything placed on it moves with it.
 void Stage::fit_scene() {
-    has_scene_ = egg_ && egg_->has_scene && egg_->scene.day;
+    has_scene_ = egg_ && egg_->has_scene;
     if (!has_scene_) {
         scene_ = Scene();
         scene_x_ = scene_y_ = 0;
@@ -120,7 +120,8 @@ void Stage::fit_scene() {
         blocked_rows_.clear();
         return;
     }
-    scene_ = egg_->scene;
+    scene_ = Scene();
+    static_cast<SceneLayout&>(scene_) = egg_->scene;     // its moving parts stay the egg's (Pet draws them from there)
     const int s = scene_scale_ = scene_.scale;
     const bool keep = scene_.keep[0] >= 0 && scene_.keep[2] > scene_.keep[0];
     if (keep) {
@@ -181,18 +182,7 @@ bool Stage::walkable(float x, float y) const {
     return true;
 }
 
-void Stage::measure_pet() {
-    half_width_ = 0;
-    const Anim* a = egg_ ? egg_->find("Idle") : nullptr;
-    if (!a) return;
-    FrameCache cache;
-    for (int r = 0; r < a->rows; r++)
-        for (int f = 0; f < a->frames; f++) {
-            const FrameBox& b = pixels_of(a->box(r, f), cache);
-            for (int i = 0; i < b.w * b.h; i++)
-                if (b.px[i]) half_width_ = std::max(half_width_, std::abs(2 * (b.x + i % b.w) + 1 - a->fw) * unit_ / 2);
-        }
-}
+void Stage::measure_pet() { half_width_ = egg_ ? idle_reach(*egg_) * unit_ / 2 : 0; }
 
 void Stage::measure_desk() {
     cover_ = Cover();
