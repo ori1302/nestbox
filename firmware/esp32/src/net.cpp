@@ -5,6 +5,7 @@
 #include <esp_http_server.h>
 #include <esp_mac.h>
 #include <mdns.h>
+#include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -37,6 +38,9 @@ std::string pet_name;
 uint32_t tried_ms = 0;
 uint32_t settle_ms = 0;
 bool held = false;                           // setup is using the radio
+// Failed joins since the station last had an address, and the last one's reason (the Wi-Fi event task writes them).
+std::atomic<uint32_t> failed_joins{0};
+std::atomic<uint8_t> failed_reason{0};
 
 std::string status_line(int status) {
     const char* reason = nestbox::reason_phrase(status);
@@ -238,6 +242,13 @@ void begin(const std::string& host, const std::string& ssid, const std::string& 
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);                    // modem sleep adds 100+ ms to every request
     WiFi.setAutoReconnect(true);
+    WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
+        const uint8_t reason = info.wifi_sta_disconnected.reason;
+        if (reason == WIFI_REASON_ASSOC_LEAVE) return;          // its own disconnect before a retry
+        failed_reason = reason;
+        failed_joins++;
+    }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+    WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { failed_joins = 0; }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
     start_server();
     if (!network_ssid.empty()) connect(millis());
 }
@@ -297,7 +308,14 @@ std::string ip() { return WiFi.localIP().toString().c_str(); }
 
 std::string status() {
     if (network_ssid.empty()) return "no network set: wifi <ssid> <password>";
-    if (!online()) return console_reply::JOINING + network_ssid + "\"...";
+    if (!online()) {
+        std::string line = console_reply::JOINING + network_ssid + "\"...";
+        const uint32_t failed = failed_joins;
+        if (failed)   // after the reply's prefix, which the Mac app reads
+            line += " (" + std::to_string(failed) + (failed == 1 ? " try" : " tries") + " failed, the last: " +
+                    WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(uint8_t(failed_reason))) + ")";
+        return line;
+    }
     return console_reply::ONLINE + network_ssid + console_reply::ADDRESS + ip() + console_reply::HOST_URL + held_host +
            MDNS_SUFFIX + "), signal " + std::to_string(WiFi.RSSI()) + " dBm";
 }
