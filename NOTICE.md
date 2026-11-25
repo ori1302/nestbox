@@ -2,7 +2,7 @@
 
 **The code** is MIT licensed (see `LICENSE`).
 
-**The pets' art** in `pets/` (the Goose, Milo and Robot eggs; in `pets/retro/`, the Nibble and Slime eggs and the
+**The pets' art** in `pets/` (the Goose, Milo and Robot eggs; in `pets/retro/`, the Nibble, Penguin and Slime eggs and the
 folder Nibble is packed from) and the animation in `assets/` are the NestBox authors' own, licensed CC BY 4.0
 (https://creativecommons.org/licenses/by/4.0/). Each egg also carries its own credit and licence (`credit` and
 `license` in its description), and `GET /v1/pets` shows them.

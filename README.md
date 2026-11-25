@@ -49,7 +49,7 @@ Requirements: [PlatformIO](https://docs.platformio.org/en/latest/core/installati
 scripts/package_app.sh     # the Mac app, which the board offers on its USB drive (optional)
 cd firmware/esp32
 pio run -t upload          # the firmware and the USB drive (the 2-inch board: add -e nestbox-2in)
-pio run -t uploadfs        # the pets: Goose, Milo, Robot, Nibble and Slime, from pets/ and pets/retro/
+pio run -t uploadfs        # the pets: Goose, Milo, Robot, Nibble, Penguin and Slime, from pets/ and pets/retro/
 ```
 
 The board then shows a Wi-Fi QR code; join it from a phone to set it up. If the upload can't find the board, unplug
@@ -60,7 +60,7 @@ the USB console) is in [Firmware](https://nestbox.pet/docs/firmware/). Without b
 ## Pets
 
 A pet is one `.egg` file: its animations, palette, scene and a short description. The firmware build installs the
-eggs in `pets/` (Goose, Milo and Robot, drawn in fine pixels) and `pets/retro/` (Nibble and Slime, in chunky ones);
+eggs in `pets/` (Goose, Milo and Robot, drawn in fine pixels) and `pets/retro/` (Nibble, Penguin and Slime, in chunky ones);
 Nibble's is packed from `pets/retro/nibble/`. Add an egg to a running board from its own page
 (`http://<pet's name>.local/`, **Add a pet**) or with `PUT /v1/pets/NAME`; the simulator loads eggs from
 `~/.nestbox/pets/`.
@@ -99,7 +99,7 @@ own) and **Webhooks** (a public URL for your pet, through the NestBox relay). Se
 | `companion/mac/` | `cli/`: the `nestbox` command; `app/`: the menu bar app; `selftest/`: the app's self-test |
 | `integrations/` | Example Claude Code hooks |
 | `.github/` | `ci.yml` (the tests on Linux and macOS) and `stars.yml` (a new star makes the owner's pet celebrate, through its webhook) |
-| `pets/` | The eggs the firmware installs; `retro/` holds Nibble (with the folder it is packed from) and Slime |
+| `pets/` | The eggs the firmware installs; `retro/` holds Nibble (with the folder it is packed from), Penguin and Slime |
 | `tools/` | `eggpack/` (folder to egg), `studio/` and `petrecord.cpp` (a pet frame by frame), `docgen.cpp` (what the engine serves, for the packer and the docs), `demo_gif.py`, `fontgen.py`, `tzdata.py` |
 | `scripts/` | `build.sh` (everything), `test_all.sh`, and the scripts that build, self-test and package the menu bar app |
 | `tests/` | Unit and end-to-end tests |
