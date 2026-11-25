@@ -201,10 +201,34 @@ Look Pet::look_now() const {
 float Pet::act_speed() const { return want_ == Look::Act ? act_.speed : 1.0f; }
 
 void Pet::want(Look s, uint32_t now) {
-    if (!egg_ || s == want_) return;
+    if (!egg_) return;
+    if (s == want_) {
+        next_.reset();
+        return;
+    }
+    if (!next_ && !is_reaction(s)) next_at_ = loop_end(now);
+    if (next_at_ && !is_reaction(s) && now < next_at_) {
+        next_ = s;
+        return;
+    }
+    next_.reset();
+    next_at_ = 0;
     shown_ = look();
     want_ = s;
     begin(now);
+}
+
+uint32_t Pet::loop_end(uint32_t now) const {
+    if (phase_ != Phase::Acting || want_ == Look::Act || !is_reaction(want_) || lapping_ || throwing()) return 0;
+    Pose p = resolve(want_);
+    uint32_t from = act_ms_;
+    if (p.lap) {                                             // between laps: its play there, from the lap's end
+        p = resolve(want_, false);
+        if (lap_end_ms_) from = lap_end_ms_;
+    }
+    const uint32_t run = pose_ms(p), into = now - from;
+    if (!run || run > FINISH_MAX_MS || into % run == 0) return 0;
+    return from + (into / run + 1) * run;
 }
 
 void Pet::begin(uint32_t now) {
@@ -578,6 +602,7 @@ void Pet::update(uint32_t now) {
     const float dt = last_ms_ ? float(std::min<uint32_t>(MAX_FRAME_MS, now - last_ms_)) : 0;
     last_ms_ = now;
     if (!egg_) return;
+    if (next_ && now >= next_at_) want(*next_, now);       // the reaction's loop is done
     const float night_goal = part_ == Daypart::Night ? 1.0f : part_ == Daypart::Evening ? EVENING_DARKNESS : 0.0f;
     fade_ = std::min(1.0f, fade_ + dt / SCENE_FADE_MS);
     night_ += std::clamp(night_goal - night_, -dt / SCENE_FADE_MS, dt / SCENE_FADE_MS);

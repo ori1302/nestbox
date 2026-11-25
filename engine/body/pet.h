@@ -259,6 +259,8 @@ private:
 
     // Throwing (throwing.cpp).
     bool throwing() const;
+    uint32_t pose_ms(const Pose& p) const;      // one play of a pose's frames
+    uint32_t loop_end(uint32_t now_ms) const;   // when the reaction playing ends its loop; 0: now
     Point aim_point() const;
     int throw_cycle_ticks() const;
     std::optional<Throw> throw_at(const Pose& base, uint32_t t_ms) const;
@@ -268,6 +270,11 @@ private:
 
     // Where it is going and what it shows.
     Look want_ = Look::Idle, shown_ = Look::Idle;
+    // A reaction whose time ran out mid-loop plays to the end of that loop (up to FINISH_MAX_MS), so it never stops
+    // mid-jump; then the look it was asked for comes.
+    static constexpr uint32_t FINISH_MAX_MS = 2000;
+    std::optional<Look> next_;
+    uint32_t next_at_ = 0;
     Phase phase_ = Phase::Free;
     Goal goal_;
     uint32_t act_ms_ = 0, turn_ms_ = 0;

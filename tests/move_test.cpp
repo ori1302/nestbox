@@ -926,6 +926,30 @@ void walks_at_its_pace(const Display& d, const Egg& egg, const Spots& sp) {
 
 }  // namespace
 
+// A reaction asked to end mid-loop plays to the end of that loop, then the next look comes; a new reaction cuts in at
+// once.
+void reactions_finish_their_loop(const Display& d, const Egg& egg) {
+    const std::string where = egg.name + " on " + d.id;
+    Bare b(d, egg);
+    b.pet.want(Look::Surprised, b.t);
+    if (!b.run(10000, [&] { return b.acting(); })) return test::fail(where + ": acts surprised");
+    const uint32_t run = b.pet.run_ms(), from = b.pet.acting_since();
+    check(run > 0 && run <= 2000, where + ": surprised plays one short loop (" + std::to_string(run) + " ms)");
+    b.run(run, [&] { return b.t - from >= run / 3; });
+    const uint32_t asked = b.t;
+    b.pet.want(Look::Idle, b.t);
+    check(b.pet.wanted() == Look::Surprised, where + ": asked mid-loop, it goes on with the reaction");
+    b.run(3000, [&] { return b.pet.wanted() != Look::Surprised; });
+    const uint32_t into = (b.t - FRAME_MS - from) % run;
+    check(b.pet.wanted() == Look::Idle && b.t - asked <= run + FRAME_MS && (into < FRAME_MS || into > run - FRAME_MS),
+          where + ": then idles at the end of that loop");
+    b.pet.want(Look::Surprised, b.t);
+    b.run(10000, [&] { return b.acting(); });
+    b.run(run, [&] { return b.t - b.pet.acting_since() >= run / 3; });
+    b.pet.want(Look::Happy, b.t);
+    check(b.pet.wanted() == Look::Happy, where + ": another reaction cuts in at once");
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: move_test EGG...\n");
@@ -956,6 +980,7 @@ int main(int argc, char** argv) {
             turns_at_walking_pace(w, egg);
             turns_back_smoothly(w, s);
             curves_through_points(w, s);
+            reactions_finish_their_loop(d, egg);
             const std::string where = egg.name + " on " + d.id;
             acts_face_and_place(d, egg, s, where);
             act_at_target(d, egg, where);

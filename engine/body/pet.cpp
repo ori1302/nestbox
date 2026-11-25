@@ -80,6 +80,8 @@ void Pet::set_egg(const Egg* egg) {
     frame_cache_ = FrameCache();
     item_cache_ = FrameCache();
     part_cache_.clear();
+    next_.reset();
+    next_at_ = 0;
     room_ = Room();
     desk_ = Desk();
     stage_.set_egg(egg);
@@ -183,7 +185,10 @@ Pet::Pose Pet::resolve_act(bool laps) const {
 uint32_t Pet::run_ms() const {
     if (!egg_) return 0;
     if (throwing()) return ticks_to_ms(throw_cycle_ticks()) / act_speed();
-    const Pose p = resolve(want_);
+    return pose_ms(resolve(want_));
+}
+
+uint32_t Pet::pose_ms(const Pose& p) const {
     if (!p.anim) return 0;
     int ticks = 0;
     if (p.frames.empty()) ticks = p.anim->total_ticks();
