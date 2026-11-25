@@ -291,8 +291,10 @@ $('finish').onsubmit = async e => {
   show('going');
   $('goingtitle').textContent = `Taking you to ${name}’s page…`;
   $('goingnote').textContent = `Your phone goes back to ${(status && status.ssid) || last || 'your Wi-Fi'}.`;
-  $('addr1').href = j.url; $('addr1t').textContent = j.url.replace(/\/welcome\?.*/, '/');
-  if (status && status.host) { $('addr2box').hidden = false; $('addr2').href = 'http://' + status.host + '/'; $('addr2t').textContent = 'http://' + status.host + '/'; }
+  // Its name first: it stays when the router hands out another IP address.
+  const byIp = j.url.replace(/\/welcome\?.*/, '/'), byName = status && status.host ? 'http://' + status.host + '/' : '';
+  $('addr1').href = byName || j.url; $('addr1t').textContent = byName || byIp;
+  if (byName) { $('addr2box').hidden = false; $('addr2').href = j.url; $('addr2t').textContent = byIp; }
   setTimeout(() => $('fallback').hidden = false, 15000);
   const tryHome = () => {
     const img = new Image();

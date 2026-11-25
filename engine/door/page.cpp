@@ -249,13 +249,15 @@ function show(j) {
     seg('night', +!!n, night); $('times').hidden = !n;
     if (n) { $('from').value = n[0]; $('to').value = n[1]; }
   }
-  const host = location.host, facts = [['Address', host], ['Name', dev.name + '.local']];
+  // Its name stays when the router hands out another IP address; the IP is shown only as the way this page came.
+  const facts = [['Address', dev.name + '.local']];
+  if (/^[0-9.]+$|^\[/.test(location.hostname)) facts.push(['IP address', location.hostname]);
   if (dev.temperature_c !== undefined) facts.push(['Temperature', dev.temperature_c + ' °C']);
   if (dev.wifi) facts.push(['Wi-Fi signal', dev.wifi[0].toUpperCase() + dev.wifi.slice(1)]);
   if (j.uptime_s !== undefined) facts.push(['Running for', since(j.uptime_s)]);
   facts.push(['Firmware', dev.firmware]);
   $('facts').replaceChildren(...facts.map(([k, v]) => { const r = el('div'); r.append(el('dt', '', k), el('dd', '', v)); return r; }));
-  $('agents').textContent = 'http://' + host + '/agents';
+  $('agents').textContent = dev.agents || 'http://' + dev.name + '.local/agents';
   render();
 }
 function since(s) {
@@ -264,6 +266,14 @@ function since(s) {
 }
 async function refresh() {
   try { show(await api('GET', '/v1')); } catch (e) { $('state').textContent = e.message; }
+}
+// Opened by its IP address (setup's handover, a typed address) and not yet allowed here: moves to its name, which
+// stays when the router hands out another address, as soon as this browser can reach the name.
+function toName() {
+  if (key || !dev || !/^[0-9.]+$/.test(location.hostname)) return;
+  const img = new Image(), host = dev.name + '.local' + (location.port ? ':' + location.port : '');
+  img.onload = () => location.replace('http://' + host + '/');
+  img.src = 'http://' + host + '/ping.png?' + Date.now();
 }
 async function set(screen) {
   try {
@@ -402,7 +412,7 @@ $('copy').onclick = () => {
   const done = () => { $('copy').textContent = 'Copied'; setTimeout(() => { $('copy').textContent = 'Copy'; }, 1500); };
   if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => {});
 };
-loadPets().then(refresh);
+loadPets().then(refresh).then(toName);
 setInterval(() => { if (!document.hidden) refresh(); }, 5000);
 )JS";
 
