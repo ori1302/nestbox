@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
         R"({"from":"t","caption":"A caption along the bottom","gauge":40,"label":"half"})",
         R"({"from":"t","do":"throw"})",
         R"({"from":"t","do":"run","effect":"sparkles"})",
-        R"({"from":"slack","say":"Dana wrote to you","effect":"letter","for":20,"do":[{"do":"surprised","face":"front"}]})",
+        R"({"from":"slack","say":"Shira wrote to you","effect":"letter","for":20,"do":[{"do":"surprised","face":"front"}]})",
         R"({"from":"t","state":"over"})",
     };
     int frames = 0;

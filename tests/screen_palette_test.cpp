@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
         R"({"from":"claude","id":"s1","state":"asking","say":"May I run the tests?"})",
         R"({"from":"t","do":"sleep","for":"10s"})",
         R"({"from":"t","sign":"heart","effect":"notes"})",
-        R"({"from":"slack","id":"D1","say":"Dana wrote to you","effect":"letter","for":20})",
+        R"({"from":"slack","id":"D1","say":"Shira wrote to you","effect":"letter","for":20})",
         R"({"from":"t","state":"over"})",
     };
     int eggs = 0;

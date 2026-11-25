@@ -514,7 +514,7 @@ void signs_effects_and_off() {
     tell(b, R"({"from":"s","sign":"star","effect":"confetti"})", 2000);
     n = note(b, "s", "", 2000);
     check(shows(n, "sign") && shows(n, "effect"), "signs and effects by name");
-    const auto warned = tell(b, R"({"from":"slack","id":"D1","say":"Dana wrote to you","effect":"letter","for":20})", 3000);
+    const auto warned = tell(b, R"({"from":"slack","id":"D1","say":"Shira wrote to you","effect":"letter","for":20})", 3000);
     n = note(b, "slack", "D1", 3000);
     check(shows(n, "effect") && shows(n, "say") && warned.warnings.empty(), "a letter, as Slack sends it");
     const auto jumped = tell(b, R"({"from":"slack","id":"D2","say":"Sam wrote to you","effect":"letter","for":20,)"

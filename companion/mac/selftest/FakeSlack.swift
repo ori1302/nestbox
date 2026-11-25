@@ -177,9 +177,9 @@ final class FakeSlack: @unchecked Sendable {
             return #"{"ok":true,"url":"https://test.slack.com/","team":"Test Team","user":"ada","team_id":"T0TEST","#
                 + #""user_id":"\#(Self.me)"}"#
         case "users.info":
-            guard arguments["user"] == "UDANA" else { return #"{"ok":false,"error":"user_not_found"}"# }
-            return #"{"ok":true,"user":{"id":"UDANA","name":"dana","real_name":"Dana Scully","#
-                + #""profile":{"display_name":"Dana","real_name":"Dana Scully"}}}"#
+            guard arguments["user"] == "USHIRA" else { return #"{"ok":false,"error":"user_not_found"}"# }
+            return #"{"ok":true,"user":{"id":"USHIRA","name":"shira","real_name":"Shira","#
+                + #""profile":{"display_name":"Shira","real_name":"Shira"}}}"#
         case "conversations.info":
             switch arguments["channel"] {
             case "C0DEPLOYS": return #"{"ok":true,"channel":{"id":"C0DEPLOYS","name":"deploys","is_channel":true}}"#

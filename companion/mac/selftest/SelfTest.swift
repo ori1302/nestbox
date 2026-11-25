@@ -569,16 +569,16 @@ final class SelfTest: @unchecked Sendable {
         }
         let fits = tells.allSatisfy { $0.say.utf8.count <= SlackTell.sayBytes && $0.seconds == 20 }
         check(fits, "long names are cut to fit the bubble (72 bytes), shown for 20 s")
-        let body = (try? JSONEncoder().encode(SlackTell.call(.mention, id: "C1", who: "Dana", place: "#deploys",
+        let body = (try? JSONEncoder().encode(SlackTell.call(.mention, id: "C1", who: "Shira", place: "#deploys",
                                                              count: 1))).map { String(decoding: $0, as: UTF8.self) }
-        check(body?.contains(#""say":"Dana mentioned you in #deploys""#) == true && body?.contains(#""for":20"#) == true
+        check(body?.contains(#""say":"Shira mentioned you in #deploys""#) == true && body?.contains(#""for":20"#) == true
                   && body?.contains(#""from":"slack""#) == true && body?.contains("state") == false,
               "a mention's tell: a bubble with who and where, for 20 s, no state  [\(body ?? "")]")
         let sorted = JSONEncoder()
         sorted.outputFormatting = .sortedKeys
-        let first = (try? sorted.encode(SlackTell.call(.directMessage, id: "D1", who: "Dana", place: nil, count: 1)))
+        let first = (try? sorted.encode(SlackTell.call(.directMessage, id: "D1", who: "Shira", place: nil, count: 1)))
             .map { String(decoding: $0, as: UTF8.self) }
-        let more = (try? sorted.encode(SlackTell.call(.directMessage, id: "D1", who: "Dana", place: nil, count: 2)))
+        let more = (try? sorted.encode(SlackTell.call(.directMessage, id: "D1", who: "Shira", place: nil, count: 2)))
             .map { String(decoding: $0, as: UTF8.self) }
         check(first?.contains(#""effect":"letter""#) == true
                   && first?.contains(#""do":[{"do":"surprised","face":"front"}]"#) == true
@@ -632,31 +632,31 @@ final class SelfTest: @unchecked Sendable {
         check(onMain { MenuBar.words(for: m.slack) } == "Connected as ada in Test Team" && until(5) { told("Slack is connected") },
               "the menu says who is connected, and the pet says Slack is connected")
 
-        fake.event("Ev1", #"{"type":"message","channel":"D0DANA","channel_type":"im","user":"UDANA","#
+        fake.event("Ev1", #"{"type":"message","channel":"D0SHIRA","channel_type":"im","user":"USHIRA","#
                    + #""text":"the secret plan","ts":"1700000001.000100"}"#)
         check(until(5) { fake.acks.contains("env-Ev1") }, "each envelope is acknowledged")
-        check(until(5) { note("D0DANA") != nil } && told("Dana wrote to you")
+        check(until(5) { note("D0SHIRA") != nil } && told("Shira wrote to you")
                   && !onMain { m.log.lines.contains { $0.contains("secret plan") } },
               "a DM: a bubble with who wrote, never what")
-        fake.event("Ev1", #"{"type":"message","channel":"D0DANA","channel_type":"im","user":"UDANA","#
+        fake.event("Ev1", #"{"type":"message","channel":"D0SHIRA","channel_type":"im","user":"USHIRA","#
                    + #""text":"again","ts":"1700000001.000100"}"#)
-        fake.event("Ev2", #"{"type":"message","channel":"D0DANA","channel_type":"im","user":"UDANA","#
+        fake.event("Ev2", #"{"type":"message","channel":"D0SHIRA","channel_type":"im","user":"USHIRA","#
                    + #""text":"more","ts":"1700000002.000100"}"#)
-        check(until(5) { told("2 messages from Dana") } && !told("3 messages"),
+        check(until(5) { told("2 messages from Shira") } && !told("3 messages"),
               "a second DM counts; Slack sending one again does not")
 
-        fake.event("Ev3", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"UDANA","#
+        fake.event("Ev3", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"USHIRA","#
                    + #""text":"can you look, <@UADA>?","ts":"1700000010.000100"}"#)
-        check(until(5) { note("C0DEPLOYS") != nil } && told("Dana mentioned you in #deploys"),
+        check(until(5) { note("C0DEPLOYS") != nil } && told("Shira mentioned you in #deploys"),
               "a mention: who and in which channel")
         let mark = onMain { m.log.lines.count }
-        fake.event("Ev4", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"UDANA","#
+        fake.event("Ev4", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"USHIRA","#
                    + #""text":"lunch?","ts":"1700000011.000100"}"#)
         _ = until(1.5) { false }
         check(fake.acks.contains("env-Ev4") && !onMain { m.log.lines.dropFirst(mark).contains { $0.contains("slack") } },
               "a channel message that doesn't call the user: acknowledged, not told")
         let mark1 = onMain { m.log.lines.count }
-        fake.event("Ev5", #"{"type":"message","channel":"D0DANA","channel_type":"im","user":"UADA","#
+        fake.event("Ev5", #"{"type":"message","channel":"D0SHIRA","channel_type":"im","user":"UADA","#
                    + #""text":"on it <@UADA>","ts":"1700000012.000100"}"#)
         _ = until(1.5) { false }
         check(!onMain { m.log.lines.dropFirst(mark1).contains { $0.contains("\"from\":\"slack\"") } },
@@ -665,13 +665,13 @@ final class SelfTest: @unchecked Sendable {
         onMain { m.setSlackWants(SlackWants(threads: true)) }
         fake.event("Ev6", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"UADA","#
                    + #""text":"me too","ts":"1700000021.000100","thread_ts":"1700000020.000100"}"#)
-        fake.event("Ev7", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"UDANA","#
+        fake.event("Ev7", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"USHIRA","#
                    + #""text":"done","ts":"1700000022.000100","thread_ts":"1700000020.000100"}"#)
-        check(until(5) { note("C0DEPLOYS-1700000020.000100") != nil } && told("Dana replied in a thread in #deploys"),
+        check(until(5) { note("C0DEPLOYS-1700000020.000100") != nil } && told("Shira replied in a thread in #deploys"),
               "Replies in Your Threads ticked: a reply in a thread the user wrote in")
         onMain { m.setSlackWants(SlackWants(mentions: false, threads: true)) }
         let mark2 = onMain { m.log.lines.count }
-        fake.event("Ev8", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"UDANA","#
+        fake.event("Ev8", #"{"type":"message","channel":"C0DEPLOYS","channel_type":"channel","user":"USHIRA","#
                    + #""text":"<@UADA> again","ts":"1700000030.000100"}"#)
         _ = until(1.5) { false }
         check(!onMain { m.log.lines.dropFirst(mark2).contains { $0.contains("mentioned you") } }
@@ -685,10 +685,10 @@ final class SelfTest: @unchecked Sendable {
         check(wait(5) { m.slack.quietUntil != nil && MenuBar.words(for: m.slack).hasPrefix("Do Not Disturb until") },
               "Slack's Do Not Disturb: the menu says so")
         let mark3 = onMain { m.log.lines.count }
-        fake.event("Ev10", #"{"type":"message","channel":"D0DANA","channel_type":"im","user":"UDANA","#
+        fake.event("Ev10", #"{"type":"message","channel":"D0SHIRA","channel_type":"im","user":"USHIRA","#
                    + #""text":"psst","ts":"1700000040.000100"}"#)
         _ = until(1.5) { false }
-        check(!onMain { m.log.lines.dropFirst(mark3).contains { $0.contains("Dana wrote") } },
+        check(!onMain { m.log.lines.dropFirst(mark3).contains { $0.contains("Shira wrote") } },
               "...and a DM during it is not told")
         fake.event("Ev11", #"{"type":"dnd_updated","user":"UADA","dnd_status":{"dnd_enabled":false,"#
                    + #""snooze_enabled":false}}"#)
