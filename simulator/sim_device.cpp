@@ -44,6 +44,7 @@ Settings load_settings(const std::string& name, const Display& display) {
     s.relay.mailbox = f.str("relay_mailbox");
     s.relay.secret = f.str("relay_secret");
     if (f.has("relay_on")) s.relay.on = f.flag("relay_on");
+    s.ignore = ignore_from_text(f.str("ignore"));
     return s;
 }
 
@@ -56,6 +57,7 @@ void store_settings(const std::string& name, const Settings& s) {
                                               .field("night_from", sc.night_from).field("night_to", sc.night_to).field("care", sc.care)
                                               .field("relay_mailbox", s.relay.mailbox)
                                               .field("relay_secret", s.relay.secret).field("relay_on", s.relay.on)
+                                              .field("ignore", ignore_text(s.ignore))
                                               .end_object().text() << "\n";
 }
 

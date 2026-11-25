@@ -27,6 +27,7 @@ constexpr const char* CARE = "care";         // "1": burn-in care (on by default
 constexpr const char* RELAY_MAILBOX = "relay_box";     // webhooks through the relay (host/relay.h): the mailbox key,
 constexpr const char* RELAY_SECRET = "relay_secret";   // the webhooks' secret,
 constexpr const char* RELAY_ON = "relay_on";           // and whether to use them
+constexpr const char* IGNORE = "ignore";     // the senders the pet ignores, "claude,slack"
 
 constexpr int DEFAULT_BRIGHTNESS = nestbox::ScreenSettings::BRIGHT;
 

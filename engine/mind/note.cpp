@@ -48,6 +48,8 @@ std::string clean_name(const std::string& raw, bool slashes, size_t max, bool& c
     return out;
 }
 
+constexpr const char* ANON = "anon";      // the sender of a tell without "from"
+
 // A text part: given, switched off with false, or left out.
 void read_text(const Fields& f, const char* key, size_t max, Part<std::string>& out, std::vector<std::string>& w) {
     if (!f.has(key)) return;
@@ -111,6 +113,17 @@ uint16_t color_value(const std::string& name) {
     return CREAM;                          // the screen's ink
 }
 
+std::string tell_sender(const Fields& f) {
+    bool changed = false;
+    const std::string from = clean_name(f.str("from"), false, Note::MAX_FROM, changed);
+    return from.empty() ? ANON : from;
+}
+
+bool valid_sender(const std::string& name) {
+    bool changed = false;
+    return !name.empty() && clean_name(name, false, Note::MAX_FROM, changed) == name && !changed;
+}
+
 bool parse_tell(const Fields& f, Note& out, std::vector<std::string>& w) {
     out = Note{};
     bool any = false;
@@ -125,7 +138,7 @@ bool parse_tell(const Fields& f, Note& out, std::vector<std::string>& w) {
     }
     bool changed = false;
     out.from = clean_name(f.str("from"), false, Note::MAX_FROM, changed);
-    if (out.from.empty()) out.from = "anon";
+    if (out.from.empty()) out.from = ANON;
     if (changed) w.push_back("\"from\" takes letters, digits, -, _ and . up to " + std::to_string(Note::MAX_FROM) +
                              " characters; it was read as \"" + out.from + "\"");
     changed = false;

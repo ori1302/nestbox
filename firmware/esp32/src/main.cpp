@@ -157,6 +157,7 @@ void load_api_settings(PetCore& core) {
     s.relay.mailbox = settings::get(settings::RELAY_MAILBOX);
     s.relay.secret = settings::get(settings::RELAY_SECRET);
     s.relay.on = settings::get_flag(settings::RELAY_ON, true);
+    s.ignore = nestbox::ignore_from_text(settings::get(settings::IGNORE));
     core.dev.relay_state = "off";   // this firmware can hold the relay's socket; the relay task keeps it current
     core.brain.text_size(s.text);
     core.dev.save = [](const nestbox::Settings& kept) {
@@ -174,6 +175,7 @@ void load_api_settings(PetCore& core) {
         settings::put(settings::RELAY_MAILBOX, kept.relay.mailbox);
         settings::put(settings::RELAY_SECRET, kept.relay.secret);
         settings::put_flag(settings::RELAY_ON, kept.relay.on);
+        settings::put(settings::IGNORE, nestbox::ignore_text(kept.ignore));
     };
 }
 

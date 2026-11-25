@@ -61,6 +61,8 @@ public:
     void end_device();
     // Ends one of them, by its id.
     void end_device(const std::string& id);
+    // Ends every note from a sender (as its own "over" would); returns how many.
+    int end_sender(const std::string& from);
 
     // A report from a source of activity; returns its warnings.
     std::vector<std::string> user(const Fields& f, uint32_t now_ms) { return user_.report(f, now_ms); }

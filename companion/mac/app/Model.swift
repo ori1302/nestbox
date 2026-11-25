@@ -383,6 +383,20 @@ final class Model {
         }
     }
 
+    /// Switches a sender off (the pet ignores it) or back on; completes with the HTTP status (0: no answer).
+    func setListening(to sender: String, _ listening: Bool, completion: ((Int) -> Void)? = nil) {
+        guard let base = petURL, let status else {
+            completion?(0)
+            return
+        }
+        let name = sender.lowercased()
+        let ignore = status.ignore.filter { $0 != name } + (listening ? [] : [name])
+        PetClient.post(IgnoredSenders(ignore: ignore), "/v1", to: base) { [weak self] code, _ in
+            self?.pollStatus()
+            completion?(code)
+        }
+    }
+
     /// Asks the pet to forget its Wi-Fi; completes with the HTTP status (0: no answer).
     func forgetWiFi(completion: @escaping (Int) -> Void) {
         guard let base = petURL else {

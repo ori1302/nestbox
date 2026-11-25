@@ -139,6 +139,10 @@ data-l="15 min|30 min|1 hr|3 hr|6 hr|Never"></div>
 <p class=hint id=care-hint></p></div>
 </div>
 <p class=say id=screen-say role=status></p></section>
+<section id=listen hidden><div class=head>{{Listens to}}</div>
+<div class=panel id=senders></div>
+<p class=hint>When one is off, the pet ignores it, and what it was showing goes away.</p>
+<p class=say id=listen-say role=status></p></section>
 <section><div class=head>{{This NestBox}}</div>
 <dl class=list id=facts></dl><div id=dev-ask></div>
 <div class=acts><button class=do id=rename type=button>Rename</button><button class=do id=restart type=button>Restart</button>
@@ -210,7 +214,7 @@ const STATE = {awake: 'Awake', dim: 'Dimmed', off: 'Off'};
 function render() {
   const can = !!key;
   $('lock').hidden = can;
-  document.querySelectorAll('#screen input, #screen .seg button, #add, #edit, #rename, #restart, #forget, #pets button')
+  document.querySelectorAll('#screen input, #screen .seg button, #senders button, #add, #edit, #rename, #restart, #forget, #pets button')
     .forEach(b => { b.disabled = !can; });
   $('foot').replaceChildren();
   if (can) {
@@ -260,7 +264,32 @@ function show(j) {
   facts.push(['Firmware', dev.firmware]);
   $('facts').replaceChildren(...facts.map(([k, v]) => { const r = el('div'); r.append(el('dt', '', k), el('dd', '', v)); return r; }));
   $('agents').textContent = dev.agents || 'http://' + dev.name + '.local/agents';
+  listen(dev.senders || []);
   render();
+}
+// A row for each sender it has heard from, rebuilt only when they change.
+function listen(list) {
+  $('listen').hidden = !list.length;
+  const names = list.map(s => s.from).join(' ');
+  if ($('senders').dataset.n !== names) {
+    $('senders').dataset.n = names;
+    $('senders').replaceChildren(...list.map(s => {
+      const row = el('div', 'ctl'), top = el('div', 'top line'), lb = el('span', 'lb', s.from), g = el('div', 'seg two');
+      lb.id = 'l-q-' + s.from; g.id = 'q-' + s.from; g.setAttribute('role', 'group'); g.setAttribute('aria-labelledby', lb.id);
+      g.dataset.v = '1 0'; g.dataset.l = 'On|Off';
+      top.append(lb, g); row.append(top); return row;
+    }));
+  }
+  list.forEach(s => seg('q-' + s.from, +!s.ignored, on => hush(s.from, !on)));
+}
+async function hush(name, off) {
+  const k = name.toLowerCase(), ignore = (dev.ignore || []).filter(n => n !== k);
+  if (off) ignore.push(k);
+  try {
+    const j = await api('POST', '/v1', {ignore});
+    say('listen-say', (j.warnings && j.warnings[0]) || 'Saved.');
+    await refresh();
+  } catch (e) { say('listen-say', e.message); }
 }
 function since(s) {
   const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
@@ -498,7 +527,7 @@ std::string device_page(const std::string& raw_name, const std::string& name_svg
     else html += "<h1 aria-label=\"" + name + "\">" + name_svg + "</h1>";
     html += "<p class=state id=state>&nbsp;</p></div></header>";
     std::string body = BODY, script = SCRIPT;
-    for (const char* title : {"Pets", "Screen", "This NestBox", "Connect"})
+    for (const char* title : {"Pets", "Screen", "Listens to", "This NestBox", "Connect"})
         replace_first(body, std::string("{{") + title + "}}", heading(title));
     replace_first(script, "{{GLYPHS}}", glyph_table());
     html += body + "<script>" + script + "</script></main></html>";

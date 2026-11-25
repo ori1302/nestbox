@@ -168,6 +168,11 @@ void frames() {
 
     handle_request(p.device, "POST", "/v1", R"({"lock":true})", 13 * S, "", "", true);
     check(relay_deliver(p.device, frame(SECRET, tell), 14 * S).status == 200, "a locked pet still takes webhooks");
+    handle_request(p.device, "POST", "/v1", R"({"ignore":["ci"]})", 15 * S, "", "", true);
+    d = relay_deliver(p.device, frame(SECRET, R"({"from":"ci","state":"failed","line":"main is red"})"), 16 * S);
+    const std::string now = handle_request(p.device, "GET", "/v1", "", 17 * S, "", "", true).body;
+    check(d.status == 200 && contains(now, "\"notes\"") && !contains(now, "main is red"),
+          "an ignored sender's webhook: answered, and ignored");
 
     check(same_secret("abc", "abc") && !same_secret("abc", "abd") && !same_secret("abc", "abcd"), "same_secret");
     check(relay_headers(RelaySettings{MAILBOX, SECRET, true}) == "X-NestBox-Mailbox: " + MAILBOX + "\r\n",

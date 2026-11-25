@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 #include "body/pet.h"
 #include "body/shelf.h"
 #include "door/http.h"
@@ -36,6 +37,7 @@ struct Settings {
     int text = 2;                // text size: 1 small, 2 medium, 3 large
     ScreenSettings screen;       // brightness and when the screen rests
     RelaySettings relay;
+    std::vector<std::string> ignore;  // the senders the pet ignores, lower-case
 };
 
 // What the platform knows of the board's health, for GET /v1 and the device's page; unknown values stay unset.
@@ -92,6 +94,13 @@ struct Device {
     // ("-": its own name back), which the platform takes and clears.
     bool renames = false;
     std::string rename_to;
+    // The senders heard from lately, for GET /v1 (a page or an app offers them to switch off): the name as last
+    // written, and when.
+    struct Heard {
+        std::string from;
+        uint32_t at = 0;
+    };
+    std::vector<Heard> heard;
     uint32_t restart_at = 0;     // a restart was asked for: the platform restarts at this time (0: none)
     uint32_t rate_second = 0;    // the rate limit's current second, and the requests in it
     int rate_count = 0;
@@ -138,5 +147,11 @@ constexpr size_t MAX_EGG = 2 * 1024 * 1024;
 size_t body_limit(const std::string& method, const std::string& path);
 // Requests from the network per second; more are refused until the next second.
 constexpr int MAX_REQUESTS_PER_S = 20;
+// The senders the pet ignores, at most; and the senders it remembers hearing from.
+constexpr size_t MAX_IGNORED = 12, MAX_HEARD = 12;
+// The ignored senders as a platform keeps them ("claude,slack"), and back; names that are not a sender's are
+// dropped, so nothing kept (an older device's settings) reads as none.
+std::string ignore_text(const std::vector<std::string>& senders);
+std::vector<std::string> ignore_from_text(const std::string& text);
 
 }  // namespace nestbox

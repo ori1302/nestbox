@@ -9,6 +9,10 @@ struct PetStatus: Decodable, Equatable {
     let id: String?
     /// device.relay: nil when the pet's firmware can't hold the relay's socket.
     let relay: RelayStatus?
+    /// device.senders: those heard lately and the ignored ones; empty from firmware that can't ignore a sender.
+    let senders: [PetSender]
+    /// device.ignore: the senders the pet ignores, lower-case.
+    let ignore: [String]
 
     /// A simulator: "simulator" in its device name, or an id starting with "sim-" (the companion helper's rule too).
     var isSimulator: Bool { (device?.contains("simulator") ?? false) || (id?.hasPrefix("sim-") ?? false) }
@@ -23,19 +27,24 @@ struct PetStatus: Decodable, Equatable {
         let name: String?
         let id: String?
         let relay: RelayStatus?
+        let senders: [PetSender]?
+        let ignore: [String]?
     }
 
     private enum CodingKeys: String, CodingKey {
         case now, device
     }
 
-    init(pet: String?, doing: String?, why: String?, device: String?, id: String?, relay: RelayStatus? = nil) {
+    init(pet: String?, doing: String?, why: String?, device: String?, id: String?, relay: RelayStatus? = nil,
+         senders: [PetSender] = [], ignore: [String] = []) {
         self.pet = pet
         self.doing = doing
         self.why = why
         self.device = device
         self.id = id
         self.relay = relay
+        self.senders = senders
+        self.ignore = ignore
     }
 
     init(from decoder: Decoder) throws {
@@ -43,8 +52,14 @@ struct PetStatus: Decodable, Equatable {
         let now = try fields.decodeIfPresent(Now.self, forKey: .now)
         let device = try fields.decodeIfPresent(Device.self, forKey: .device)
         self.init(pet: now?.pet, doing: now?.doing, why: now?.why, device: device?.name, id: device?.id,
-                  relay: device?.relay)
+                  relay: device?.relay, senders: device?.senders ?? [], ignore: device?.ignore ?? [])
     }
+}
+
+/// A sender the pet has heard from (its "from"), and whether the pet ignores it.
+struct PetSender: Decodable, Equatable {
+    let from: String
+    let ignored: Bool
 }
 
 /// A pet on the device (GET /v1/pets): its name in the API, and its title.
@@ -94,6 +109,11 @@ struct PetMessage: Encodable {
 /// POST /v1: brings out another pet.
 struct PetChoice: Encodable {
     let pet: String
+}
+
+/// POST /v1 {"ignore": [...]}: the senders the pet ignores, the whole list.
+struct IgnoredSenders: Encodable {
+    let ignore: [String]
 }
 
 /// POST /v1 {"wifi": "forget"}: the pet leaves its Wi-Fi and starts setup with a phone again.

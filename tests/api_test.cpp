@@ -5,6 +5,7 @@
 #include "door/api.h"
 #include "door/setup.h"
 #include <string>
+#include <vector>
 #include "check.h"
 #include "util/json.h"
 
@@ -234,6 +235,73 @@ void reading() {
     check(json(d.get("/v1/debug", 6000).body).has("x"), "the body's details for tests");
 }
 
+// POST /v1 {"ignore"}: the senders the pet ignores. Their tells still succeed but change nothing, what they showed
+// ends, and GET /v1 lists them with the senders heard lately.
+void ignored_senders() {
+    Door d;
+    const std::string bearer = "Bearer " + d.pair(5000);
+    auto post = [&](const std::string& body, uint32_t now) {
+        return json(d.call("POST", "/v1", body, now, HOST, "", false, bearer).body);
+    };
+    d.tell(R"({"from":"Slack","id":"dm","state":"asking","line":"a message"})", 10 * S);
+    d.tell(R"({"from":"ci","state":"working"})", 11 * S);
+    Fields f = json(d.get("/v1", 12 * S).body);
+    check(f.str("device.ignore") == "[]" && f.str("device.senders.0.from") == "Slack" &&
+              f.str("device.senders.0.ignored") == "false" && f.str("device.senders.1.from") == "ci" &&
+              !f.has("device.senders.2.from"),
+          "GET /v1 lists the senders heard, none ignored");
+
+    f = post(R"({"ignore":["Slack"]})", 13 * S);
+    check(f.str("ok") == "true" && f.str("warnings") == "[]" && d.device.settings.ignore == std::vector<std::string>{"slack"} &&
+              d.saved.ignore == d.device.settings.ignore,
+          "a sender is ignored, its name lower-cased, and it is kept");
+    f = json(d.get("/v1", 14 * S).body);
+    check(f.str("notes.0.from") == "ci" && !f.has("notes.1.from") && f.str("device.ignore.0") == "slack" &&
+              f.str("device.senders.0.ignored") == "true" && f.str("device.senders.1.ignored") == "false",
+          "what it showed ends at once, whatever the case of its name; GET /v1 says it is ignored");
+
+    const uint32_t woke = d.device.active_at;
+    const Response r = d.tell(R"({"from":"SLACK","state":"asking","say":"hi","line":"again"})", 15 * S);
+    f = json(r.body);
+    check(r.status == 200 && f.str("ok") == "true" && f.str("ignored") == "true" && f.str("note.from") == "SLACK" &&
+              f.str("note.showing") == "[]",
+          "an ignored sender's tell: ok, and ignored");
+    f = json(d.get("/v1", 16 * S).body);
+    check(!f.has("notes.1.from") && !f.has("now.say") && d.device.active_at == woke, "it changes nothing, not even the screen");
+
+    f = post(R"({"ignore":[]})", 17 * S);
+    check(d.device.settings.ignore.empty() && d.saved.ignore.empty(), "[]: none ignored");
+    f = json(d.tell(R"({"from":"slack","say":"back"})", 18 * S).body);
+    check(!f.has("ignored") && f.str("now.say") == "back", "then it is heard again");
+
+    for (const char* bad : {R"({"ignore":"slack"})", R"({"ignore":["slack","a b"]})", R"({"ignore":[{"from":"x"}]})",
+                            R"({"ignore":["device"]})", R"({"ignore":{"slack":true}})",
+                            R"({"ignore":["a","b","c","d","e","f","g","h","i","j","k","l","m"]})"})
+        check(contains(post(std::string(R"({"text":"small",)") + (bad + 1), 19 * S).str("warnings"), "ignore") &&
+                  d.device.settings.ignore.empty() && d.device.settings.text == 1,
+              std::string("refused with a warning, the rest still done: ") + bad);
+    check(d.call("POST", "/v1", R"({"ignore":["ci"]})", 20 * S).status == 401, "it needs the key");
+
+    for (int i = 0; i < 14; i++) d.tell(R"({"from":"s)" + std::to_string(i) + R"(","say":"hi"})", 30 * S + i * S);
+    f = json(d.get("/v1", 50 * S).body);
+    const std::string senders = f.str("device.senders");
+    check(f.has("device.senders.11.from") && !f.has("device.senders.12.from") && !contains(senders, "\"ci\"") &&
+              contains(senders, "\"s13\""),
+          "it remembers the 12 heard from last");
+
+    Door fresh;
+    fresh.device.settings.ignore = {"music"};
+    f = json(fresh.get("/v1", S).body);
+    check(f.str("device.senders.0.from") == "music" && f.str("device.senders.0.ignored") == "true",
+          "an ignored sender not heard since the start is listed, to switch back on");
+
+    check(ignore_text({"claude", "slack"}) == "claude,slack" &&
+              ignore_from_text("claude,slack") == std::vector<std::string>{"claude", "slack"},
+          "kept as text, and read back");
+    check(ignore_from_text("").empty() && ignore_from_text("Claude,,a b,claude,device") == std::vector<std::string>{"claude"},
+          "nothing kept: none ignored; what is not a sender's name is dropped");
+}
+
 }  // namespace
 
 // When the screen rests (door/rest.h): dimmed, then off, sooner when nobody is there or at night; what wakes it.
@@ -368,6 +436,7 @@ int main() {
     lock();
     changing_the_device();
     renaming();
+    ignored_senders();
     reading();
     return test::summary();
 }

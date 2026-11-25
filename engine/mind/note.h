@@ -65,6 +65,10 @@ struct Note {
 
 // Reads one tell into `out`, with a warning for everything it could not use. False if nothing could be used at all.
 bool parse_tell(const Fields& f, Note& out, std::vector<std::string>& warnings);
+// The sender a tell is from, as parse_tell() reads "from".
+std::string tell_sender(const Fields& f);
+// A name a sender can have: letters, digits, "-", "_" and ".", up to Note::MAX_FROM.
+bool valid_sender(const std::string& name);
 
 // "8s", "5m", "2h" or a bare number of seconds, as ms; none if it is none of those or not above zero.
 std::optional<uint32_t> duration_ms(const std::string& text);

@@ -36,6 +36,9 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var bridgeStatus: NSMenuItem?
     private var bridgeToggle: NSMenuItem?
     private var bridgeCopies: [NSMenuItem] = []
+    private var sendersHeader: NSMenuItem?
+    private var sendersSeparator: NSMenuItem?
+    private var senderItems: [NSMenuItem] = []
     private let screenMenu = NSMenu()
     private var screenItem: NSMenuItem?
     private var shownPets: PetsMenuState?
@@ -127,7 +130,7 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Everything the pet hears from: this Mac, coding agents, Slack, webhooks. Slack and Webhooks are ticked while
-    /// they reach the pet.
+    /// they reach the pet; below them, each sender the pet reports, ticked while it listens to it.
     private func buildConnections() {
         let mac = addItem("This Mac", to: connectionsMenu)
         mac.isEnabled = false
@@ -171,6 +174,11 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         webhooksMenu.addItem(.separator())
         addItem("Access Key…", to: webhooksMenu, action: #selector(enterAccessKey))
         webhookRemove = addItem("Remove Webhooks…", to: webhooksMenu, action: #selector(removeWebhooks))
+        let separator = NSMenuItem.separator()
+        connectionsMenu.addItem(separator)
+        sendersSeparator = separator
+        sendersHeader = addItem("Senders", to: connectionsMenu)
+        sendersHeader?.isEnabled = false
     }
 
     @discardableResult
@@ -202,6 +210,7 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         refreshWebhooks()
         refreshSlack()
+        refreshSenders()
         refreshPets()
         refreshNetwork()
         forgetItem?.isEnabled = model.petURL != nil
@@ -353,6 +362,29 @@ final class MenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         for item in screenMenu.items {
             item.state = (item.representedObject as? String) == model.petScreen ? .on : .off
+        }
+    }
+
+    // Rebuilt only when the names change, so an open menu does not flicker; hidden until the pet reports one.
+    private func refreshSenders() {
+        let senders = model.status?.senders ?? []
+        if senderItems.map(\.title) != senders.map(\.from) {
+            for item in senderItems { connectionsMenu.removeItem(item) }
+            senderItems = senders.map { sender in
+                let item = addItem(sender.from, to: connectionsMenu, action: #selector(toggleSender(_:)))
+                item.indentationLevel = 1
+                item.toolTip = "Untick it and the pet ignores \(sender.from)"
+                return item
+            }
+        }
+        for (item, sender) in zip(senderItems, senders) { item.state = sender.ignored ? .off : .on }
+        sendersHeader?.isHidden = senders.isEmpty
+        sendersSeparator?.isHidden = senders.isEmpty
+    }
+
+    @objc private func toggleSender(_ item: NSMenuItem) {
+        model.setListening(to: item.title, item.state != .on) { status in
+            if status != HTTPStatus.ok { NSSound.beep() }
         }
     }
 

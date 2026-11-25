@@ -15,7 +15,7 @@ namespace nestbox {
 namespace {
 
 // The numbers HELP states in words.
-static_assert(MAX_BODY == 1024 && MAX_REQUESTS_PER_S == 20 && StepChain::MAX_STEPS == 8);
+static_assert(MAX_BODY == 1024 && MAX_REQUESTS_PER_S == 20 && StepChain::MAX_STEPS == 8 && MAX_IGNORED == 12);
 static_assert(Note::MAX_SAY == 72 && Note::MAX_CAPTION == 60 && Note::MAX_LINE == 60 && Note::MAX_LABEL == 8);
 static_assert(Brain::WORKING_MS == 15 * Brain::MINUTE_MS && Brain::ASKING_MS == Brain::HOUR_MS);
 static_assert(Brain::FAILING_MS == Brain::HOUR_MS && Brain::ON_MS == 15 * Brain::MINUTE_MS);
@@ -132,6 +132,9 @@ DEVICE  POST /v1 (key)
   pet    bring out another pet: its name, "next" or "previous"
   time   "22:30" forces the time of day for an hour. "auto" lets go.
   text   the size of words in bubbles and gauges: "small" "medium" "large"
+  ignore ["slack","ci"]: senders it ignores, up to 12; [] for none.
+         What they show ends, and their tells change nothing. GET /v1
+         lists device.senders: those heard lately, and the ignored ones.
   screen {"bright":70, "dim":20, "dim_after":60, "off_after":180,
          "night":"23:00-07:00", "care":true}: brightness and dimmed
          brightness in percent; minutes with nothing going on before it
@@ -151,6 +154,7 @@ REPLY
             something is not showing), ends_in (seconds)
   now       pet, doing, at, why, and the words and line on screen
   warnings  one sentence for each thing ignored or changed
+  ignored   true: the pet ignores this sender (see "ignore" above)
   200 done, maybe with warnings   400 not JSON          401 needs the key
   403 not from here               413 over 1024 bytes   429 too fast
 
@@ -354,6 +358,26 @@ std::string pet_names(const Shelf& s) {
     return joined(ids);
 }
 
+// The pet ignores this sender (POST /v1 {"ignore"}), whatever the case of its name.
+bool is_ignored(const Device& d, const std::string& from) {
+    const std::vector<std::string>& ignore = d.settings.ignore;
+    return std::find(ignore.begin(), ignore.end(), ascii_lower(from)) != ignore.end();
+}
+
+// Remembers a sender for GET /v1; when the list is full, the one heard from longest ago makes room.
+void hear(Device& d, const std::string& from, uint32_t now) {
+    for (Device::Heard& h : d.heard)
+        if (ascii_lower(h.from) == ascii_lower(from)) {
+            h = {from, now};
+            return;
+        }
+    if (d.heard.size() >= MAX_HEARD)
+        d.heard.erase(std::min_element(d.heard.begin(), d.heard.end(), [now](const auto& a, const auto& b) {
+            return now - a.at > now - b.at;
+        }));
+    d.heard.push_back({from, now});
+}
+
 // ---- Routes --------------------------------------------------------------------------------------------------
 
 Response handle_tell(Device& d, const ApiRequest& q) {
@@ -362,7 +386,19 @@ Response handle_tell(Device& d, const ApiRequest& q) {
     if (!parse_post(d, q, f, error)) return error;
     if (!q.local && ascii_lower(f.str("from")) == DEVICE_SENDER)
         return error_reply(d, 403, "\"device\" is the pet's own name; choose another \"from\"");
+    const std::string from = tell_sender(f);
+    if (is_ignored(d, from)) {                        // still a success: a sender's hooks must not fail over it
+        hear(d, from, q.now);
+        JsonWriter w;
+        w.begin_object().field("ok", true).field("ignored", true).key("note").begin_object().field("from", from)
+            .key("showing").begin_array().end_array().field("why", "this pet is set to ignore " + from)
+            .field("ends_in", 0).end_object();
+        write_now(w, d, d.brain.decide(q.now), q.now);
+        write_warnings(w, {});
+        return json_reply(w.end_object().text());
+    }
     Brain::Told t = d.brain.tell(f, q.now);
+    if (t.used && ascii_lower(t.from) != DEVICE_SENDER) hear(d, t.from, q.now);
     if (!t.used) {
         JsonWriter w;
         w.begin_object().field("ok", false).field("error", "nothing in this request could be used")
@@ -433,6 +469,17 @@ void write_device(JsonWriter& w, const Device& d) {
         .end_object()
         .field("text", SIZES[std::clamp(d.settings.text, 1, 3) - 1])
         .key("inputs").begin_array().str("button").str("motion").end_array();
+    w.key("ignore").begin_array();
+    for (const std::string& name : d.settings.ignore) w.str(name);
+    w.end_array();
+    // Those heard lately, then the ignored ones not heard since the device started, so each can be switched back on.
+    w.key("senders").begin_array();
+    for (const Device::Heard& h : d.heard)
+        w.begin_object().field("from", h.from).field("ignored", is_ignored(d, h.from)).end_object();
+    for (const std::string& name : d.settings.ignore)
+        if (std::none_of(d.heard.begin(), d.heard.end(), [&](const auto& h) { return ascii_lower(h.from) == name; }))
+            w.begin_object().field("from", name).field("ignored", true).end_object();
+    w.end_array();
     if (!d.relay_state.empty())
         w.key("relay").begin_object()
             .field("state", d.relay_state)
@@ -504,6 +551,31 @@ void set_relay(Device& d, const Fields& f, std::vector<std::string>& warnings) {
                 warnings.push_back("unknown key \"relay." + k + "\"; it takes mailbox, secret and on");
     }
     d.relay_changed = true;
+    save(d);
+}
+
+// "ignore": the senders the pet ignores, replaced as a whole; a list with anything but senders' names changes
+// nothing. What a sender shows ends as soon as it is ignored.
+void set_ignore(Device& d, const Fields& f, std::vector<std::string>& warnings) {
+    std::vector<std::string> names;
+    bool ok = f.str("ignore").rfind('[', 0) == 0;
+    for (size_t i = 0; ok; i++) {
+        const std::string k = "ignore." + std::to_string(i);
+        if (!f.has(k) && !f.has_object(k)) break;
+        const std::string name = ascii_lower(f.str(k));
+        ok = valid_sender(name) && name != DEVICE_SENDER;
+        if (ok && std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
+    }
+    if (!ok) {
+        warnings.push_back("\"ignore\" is a list of senders' names, such as [\"slack\", \"ci\"], or [] for none");
+        return;
+    }
+    if (names.size() > MAX_IGNORED) {
+        warnings.push_back("\"ignore\" takes up to " + std::to_string(MAX_IGNORED) + " senders");
+        return;
+    }
+    for (const std::string& name : names) d.brain.end_sender(name);
+    d.settings.ignore = std::move(names);
     save(d);
 }
 
@@ -586,6 +658,10 @@ Response handle_device(Device& d, const ApiRequest& q) {
                                    "\"; it takes bright, dim, dim_after, off_after, night and care");
         save(d);
     }
+    if (f.has("ignore") || f.has_object("ignore")) {
+        any = true;
+        set_ignore(d, f, warnings);
+    }
     if (f.has("restart")) {
         any = true;
         if (!f.flag("restart")) warnings.push_back("\"restart\" takes only true");
@@ -621,12 +697,12 @@ Response handle_device(Device& d, const ApiRequest& q) {
     }
     for (const auto& [k, v] : f.values)
         if (k.find('.') == std::string::npos && k != "pet" && k != "time" && k != "text" && k != "lock" && k != "key" &&
-            k != "wifi" && k != "restart" && k != "relay" && k != "name")
+            k != "wifi" && k != "restart" && k != "relay" && k != "name" && k != "ignore")
             warnings.push_back("unknown key \"" + k +
-                               "\"; this route takes pet, time, text, screen, name, wifi, restart and relay");
+                               "\"; this route takes pet, time, text, screen, ignore, name, wifi, restart and relay");
     if (!any)
-        return error_reply(d, 400,
-                           "needs \"pet\", \"time\", \"text\", \"screen\", \"name\", \"wifi\", \"restart\" or \"relay\"");
+        return error_reply(d, 400, "needs \"pet\", \"time\", \"text\", \"screen\", \"ignore\", \"name\", \"wifi\", "
+                                   "\"restart\" or \"relay\"");
     const Look look = d.brain.decide(q.now);
     JsonWriter w;
     w.begin_object().field("ok", true);
@@ -927,6 +1003,7 @@ Response serve_words(Device&, const ApiRequest&) {
         .field("pet", "bring out another pet: its name, \"next\" or \"previous\"")
         .field("time", "force the time of day for an hour, or \"auto\"")
         .field("text", "small, medium or large")
+        .field("ignore", "the senders to ignore: a list of their names, [] for none")
         .field("screen", "bright and dim (percents), dim_after and off_after (minutes, 0 never), night (\"23:00-07:00\" or \"off\"), care (true or false)")
         .field("restart", "true: restart the device")
         .field("name", "the device's new name: lower-case letters, digits and hyphens (its address is NAME.local), or \"-\" for its own")
@@ -946,6 +1023,7 @@ Response serve_words(Device&, const ApiRequest&) {
         .field("for", "24h")
         .field("notes", static_cast<long long>(Brain::MAX_NOTES))
         .field("notes_per_sender", static_cast<long long>(Brain::MAX_PER_SENDER))
+        .field("ignore", static_cast<long long>(MAX_IGNORED))
         .field("requests_per_second", MAX_REQUESTS_PER_S)
         .end_object();
     return json_reply(w.end_object().text());
@@ -1003,6 +1081,24 @@ const Route ROUTES[] = {
 };
 
 }  // namespace
+
+std::string ignore_text(const std::vector<std::string>& senders) {
+    std::string text;
+    for (const std::string& name : senders) text += (text.empty() ? "" : ",") + name;
+    return text;
+}
+
+std::vector<std::string> ignore_from_text(const std::string& text) {
+    std::vector<std::string> out;
+    for (size_t at = 0; at <= text.size() && out.size() < MAX_IGNORED;) {
+        const size_t comma = std::min(text.find(',', at), text.size());
+        const std::string name = ascii_lower(text.substr(at, comma - at));
+        if (valid_sender(name) && name != DEVICE_SENDER && std::find(out.begin(), out.end(), name) == out.end())
+            out.push_back(name);
+        at = comma + 1;
+    }
+    return out;
+}
 
 size_t body_limit(const std::string& method, const std::string& path) {
     return method == "PUT" && path.rfind(std::string(PETS_PATH) + "/", 0) == 0 ? MAX_EGG : MAX_BODY;
