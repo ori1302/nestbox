@@ -266,6 +266,48 @@ void hud_rests(const Display& d, const Egg& egg) {
     check(cared.screen.px != plain.screen.px, name + ": a change brings them back");
 }
 
+// With burn-in care, a dimmed OLED screen shows only the pet on black, drifting; an LCD dims as it is.
+void saver(const Display& d, const Egg& egg) {
+    World w(d, egg);
+    w.dev.settings.screen.care = true;
+    w.dev.settings.screen.dim_after = 15;
+    w.dev.active_at = w.t;
+    const std::string name = d.id + " " + egg.name;
+    auto lit = [&](int& x0, int& y0, int& x1, int& y1) {
+        int n = 0;
+        x0 = w.screen.w, y0 = w.screen.h, x1 = -1, y1 = -1;
+        for (int y = 0; y < w.screen.h; y++)
+            for (int x = 0; x < w.screen.w; x++)
+                if (w.screen.px[size_t(y) * w.screen.w + x]) {
+                    n++;
+                    x0 = std::min(x0, x), y0 = std::min(y0, y), x1 = std::max(x1, x), y1 = std::max(y1, y);
+                }
+        return n;
+    };
+    int x0, y0, x1, y1, a0, b0, a1, b1;
+    update_rest(w.dev, w.t);
+    w.frame();
+    check(lit(x0, y0, x1, y1) > w.screen.w * w.screen.h / 2, name + ": awake, the scene fills the screen");
+    w.t += 16 * 60 * 1000;
+    check(update_rest(w.dev, w.t) == ScreenState::Dim, name + ": dimmed after a quarter of an hour");
+    w.frame();
+    const int pet = lit(x0, y0, x1, y1);
+    if (!d.oled) {
+        check(pet > w.screen.w * w.screen.h / 2, name + ": an LCD dims with its scene");
+        return;
+    }
+    check(pet > 0 && (x1 - x0 + 1) * (y1 - y0 + 1) < w.screen.w * w.screen.h / 6 && x0 >= 0 && y1 < w.screen.h,
+          name + ": dimmed, only the pet shows, whole, on black");
+    w.t += Pet::SAVER_ACROSS_MS / 4;
+    update_rest(w.dev, w.t);
+    w.frame();
+    check(lit(a0, b0, a1, b1) > 0 && (a0 != x0 || b0 != y0), name + ": and it drifts");
+    w.dev.settings.screen.care = false;
+    update_rest(w.dev, w.t);
+    w.frame();
+    check(lit(a0, b0, a1, b1) > w.screen.w * w.screen.h / 2, name + ": without care, dimmed shows the scene");
+}
+
 // A bubble stays put while its words stay and the pet stands where it stood, however much room its animation leaves
 // beside the head or which way it turns; it is placed anew when the pet walks off or the words change.
 void bubble_stays_put() {
@@ -353,6 +395,7 @@ int main(int argc, char** argv) {
                 rings_on_frames(d, egg, corner);
             ring_under_status_line(d, egg);
             hud_rests(d, egg);
+            saver(d, egg);
             ring_over_bottom_caption(d, egg);
         }
     }

@@ -157,9 +157,14 @@ public:
     // HUD_REST_MS, and come back as soon as they change.
     static constexpr uint32_t HUD_REST_MS = 5 * 60 * 1000;
     void care(bool on) { care_ = on; }
+    // The screen saver, for an OLED screen with burn-in care while it is dimmed: only the pet, standing or asleep, drifting
+    // slowly over black, so nothing stays lit in one place.
+    void saver(bool on) { saver_ = on; }
+    static constexpr uint32_t SAVER_ACROSS_MS = 7 * 60 * 1000, SAVER_DOWN_MS = 11 * 60 * 1000;   // one sway each way
 
     void update(uint32_t now_ms);
     void render(Canvas& c, uint32_t now_ms);
+    void render_saver(Canvas& c, uint32_t now_ms);
 
 private:
     // An animation chosen for a look, ready to draw.
@@ -326,6 +331,7 @@ private:
     StatusBar bar_;
     CaptionBar caption_;
     std::vector<MeterRing> meters_;
+    bool saver_ = false;
     bool care_ = false, hud_rest_ = false;      // burn-in care; the status bar and gauges resting this frame
     uint32_t hud_since_ = 0;                    // since when they have looked the same
     std::string hud_key_;                       // what they showed, to notice a change

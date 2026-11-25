@@ -269,6 +269,10 @@ void Pet::render(Canvas& c, uint32_t now) {
         c.fill(0);
         return;
     }
+    if (saver_) {
+        render_saver(c, now);
+        return;
+    }
     rest_hud(now);
     c.tint = egg_->screen_lut.empty() ? nullptr : egg_->screen_lut.data();   // its screen palette, if it has one
     draw_room(c);
@@ -369,6 +373,25 @@ void Pet::render(Canvas& c, uint32_t now) {
     draw_overlays(c, r, acting, thrown, now);
     // While a time of day or scene fades in, the blend makes colours of its own: then the whole frame is snapped.
     if (c.tint && (fade_ < 1 || (night_ > 0 && night_ < 1))) c.recolour(egg_->screen_lut);
+    c.tint = nullptr;
+}
+
+void Pet::render_saver(Canvas& c, uint32_t now) {
+    c.fill(0);
+    const Anim* a = look_now() == Look::Sleep ? egg_->find("Sleep") : nullptr;
+    if (!a) a = egg_->standing_anim();
+    if (!a || a->boxes.empty()) return;
+    const int u = unit(), row = std::min(ROW_FRONT, a->rows - 1);
+    const FrameBox& frame = pixels_of(a->box(row, frame_at(a->durations.data(), a->frames, ms_to_ticks(now))), frame_cache_);
+    // Its feet sway across and down the screen on two slow waves, keeping the whole frame on it.
+    const int half = a->fw / 2 * u, above = egg_->feet * u + a->fh / 2 * u, below = a->fh / 2 * u - egg_->feet * u;
+    const double pi = 3.14159265358979;
+    const double sx = 0.5 + 0.5 * std::sin(2 * pi * double(now % SAVER_ACROSS_MS) / SAVER_ACROSS_MS);
+    const double sy = 0.5 + 0.5 * std::sin(2 * pi * double(now % SAVER_DOWN_MS) / SAVER_DOWN_MS);
+    const int x = half + int(sx * std::max(0, c.w - 2 * half));
+    const int y = above + int(sy * std::max(0, c.h - above - below));
+    c.tint = egg_->screen_lut.empty() ? nullptr : egg_->screen_lut.data();
+    c.sprite(frame, egg_->palette.data(), x / u * u - half, (y - above) / u * u, u);
     c.tint = nullptr;
 }
 

@@ -241,8 +241,8 @@ function show(j) {
   seg('off_after', s.off_after, v => set({off_after: v}));
   seg('care', +s.care, v => set({care: !!v}));
   $('care-hint').textContent = s.oled ?
-    'Moves the picture a pixel every few minutes, and lets the status bar and gauges go while they stay the same, ' +
-    'so nothing burns into this OLED screen.' :
+    'Moves the picture a pixel every few minutes, lets the status bar and gauges go while they stay the same, ' +
+    'and while dimmed shows only the pet, drifting on black, so nothing burns into this OLED screen.' :
     'Lets the status bar and gauges go while they stay the same. Made for OLED screens; this one is LCD.';
   const n = hhmm(s.night);
   if (!$('times').contains(document.activeElement)) {

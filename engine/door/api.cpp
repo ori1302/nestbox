@@ -1083,6 +1083,7 @@ ScreenState update_rest(Device& d, uint32_t now) {
     d.screen_state = rest_state(d.settings.screen, now - d.active_at, user_gone(d, now), d.brain.minute_of_day(now));
     d.shift = pixel_shift(d.settings.screen, now);
     d.pet.care(d.settings.screen.care);
+    d.pet.saver(d.settings.screen.care && d.pet.display().oled && d.screen_state == ScreenState::Dim);
     return d.screen_state;
 }
 
