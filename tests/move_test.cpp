@@ -950,6 +950,53 @@ void reactions_finish_their_loop(const Display& d, const Egg& egg) {
     check(b.pet.wanted() == Look::Happy, where + ": another reaction cuts in at once");
 }
 
+// A look with a scene part looping while it plays (cued with `during`) goes on to the end of the part's loop.
+// A look with a scene part looping while it plays (cued with `during`) goes on to the end of the part's loop.
+void looping_parts_finish_their_loop(const Display& d, Egg& egg) {
+    const std::string where = egg.name + " on " + d.id;
+    struct Wave {                                         // a part added to the egg for the test, taken out after
+        Egg& e;
+        Wave(Egg& e, uint8_t ticks) : e(e) {
+            Ambient a;
+            a.name = "wave";
+            a.cue = Ambient::Cue::Loop;
+            a.during = "type_fast";
+            a.frames = 4;
+            a.durations.assign(4, ticks);
+            e.scene.ambient.push_back(a);
+        }
+        ~Wave() { e.scene.ambient.pop_back(); }
+    };
+    {
+        Wave wave(egg, 60);                               // a 4 s loop
+        Bare b(d, egg);
+        b.pet.want(Look::TypeFast, b.t);
+        if (!b.run(20000, [&] { return b.acting(); })) return test::fail(where + ": types fast");
+        const uint32_t from = b.pet.acting_since(), run = 4000;
+        b.run(run * 2, [&] { return b.t - from >= run + run / 3; });
+        const uint32_t asked = b.t;
+        b.pet.want(Look::Type, b.t);
+        check(b.pet.wanted() == Look::TypeFast, where + ": asked mid-loop, it goes on with the wave");
+        b.run(run + 1000, [&] { return b.pet.wanted() != Look::TypeFast; });
+        const uint32_t into = (b.t - FRAME_MS - from) % run;
+        check(b.pet.wanted() == Look::Type && b.t - asked <= run + FRAME_MS &&
+                  (into < FRAME_MS || into > run - FRAME_MS),
+              where + ": then types at the end of that loop");
+        b.pet.want(Look::TypeFast, b.t);
+        b.run(20000, [&] { return b.acting() && b.pet.wanted() == Look::TypeFast; });
+        b.run(run, [&] { return b.t - b.pet.acting_since() >= run / 3; });
+        b.pet.want(Look::Happy, b.t);
+        check(b.pet.wanted() == Look::Happy, where + ": a reaction cuts in at once");
+    }
+    Wave slow(egg, 180);                                  // 12 s: too long to wait for
+    Bare c(d, egg);
+    c.pet.want(Look::TypeFast, c.t);
+    if (!c.run(20000, [&] { return c.acting(); })) return test::fail(where + ": types fast with a slow wave");
+    c.run(3000, [] { return false; });
+    c.pet.want(Look::Type, c.t);
+    check(c.pet.wanted() == Look::Type, where + ": a part looping longer than 8 s doesn't hold the look");
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: move_test EGG...\n");
@@ -981,6 +1028,7 @@ int main(int argc, char** argv) {
             turns_back_smoothly(w, s);
             curves_through_points(w, s);
             reactions_finish_their_loop(d, egg);
+            looping_parts_finish_their_loop(d, egg);
             const std::string where = egg.name + " on " + d.id;
             acts_face_and_place(d, egg, s, where);
             act_at_target(d, egg, where);

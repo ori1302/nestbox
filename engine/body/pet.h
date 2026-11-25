@@ -261,6 +261,7 @@ private:
     bool throwing() const;
     uint32_t pose_ms(const Pose& p) const;      // one play of a pose's frames
     uint32_t loop_end(uint32_t now_ms) const;   // when the reaction playing ends its loop; 0: now
+    uint32_t part_loop_end(uint32_t now_ms) const;   // the same for a look's looping scene part
     Point aim_point() const;
     int throw_cycle_ticks() const;
     std::optional<Throw> throw_at(const Pose& base, uint32_t t_ms) const;
@@ -273,6 +274,9 @@ private:
     // A reaction whose time ran out mid-loop plays to the end of that loop (up to FINISH_MAX_MS), so it never stops
     // mid-jump; then the look it was asked for comes.
     static constexpr uint32_t FINISH_MAX_MS = 2000;
+    // A look with a scene part that loops while it plays (a cued part's `during`) waits the same way for the part's
+    // loop, when that loop is at most PART_FINISH_MAX_MS.
+    static constexpr uint32_t PART_FINISH_MAX_MS = 8000;
     std::optional<Look> next_;
     uint32_t next_at_ = 0;
     Phase phase_ = Phase::Free;

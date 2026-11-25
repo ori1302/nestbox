@@ -219,7 +219,8 @@ void Pet::want(Look s, uint32_t now) {
 }
 
 uint32_t Pet::loop_end(uint32_t now) const {
-    if (phase_ != Phase::Acting || want_ == Look::Act || !is_reaction(want_) || lapping_ || throwing()) return 0;
+    if (phase_ != Phase::Acting || want_ == Look::Act || lapping_ || throwing()) return 0;
+    if (!is_reaction(want_)) return part_loop_end(now);
     Pose p = resolve(want_);
     uint32_t from = act_ms_;
     if (p.lap) {                                             // between laps: its play there, from the lap's end
@@ -229,6 +230,18 @@ uint32_t Pet::loop_end(uint32_t now) const {
     const uint32_t run = pose_ms(p), into = now - from;
     if (!run || run > FINISH_MAX_MS || into % run == 0) return 0;
     return from + (into / run + 1) * run;
+}
+
+// A scene part that loops with the look playing (a wave that carries the pet) plays to the end of its loop.
+uint32_t Pet::part_loop_end(uint32_t now) const {
+    const std::string key = look_key(want_);
+    uint32_t run = 0;
+    for (const Ambient& a : egg_->scene.ambient)
+        if (a.cue == Ambient::Cue::Loop && a.during == key)
+            run = std::max(run, uint32_t((uint64_t(a.total_ticks()) * 1000 + TICKS_PER_S - 1) / TICKS_PER_S));
+    const uint32_t into = now - act_ms_;
+    if (!run || run > PART_FINISH_MAX_MS || into % run == 0) return 0;
+    return act_ms_ + (into / run + 1) * run;
 }
 
 void Pet::begin(uint32_t now) {
