@@ -247,6 +247,7 @@ std::string pets_json(const Shelf& pets, const std::function<void(JsonWriter&)>&
         w.begin_object().field("name", pets.id(i)).field("title", e.name);
         if (!e.theme.empty()) w.field("about", short_text(e.theme));
         if (has_throw(e)) w.field("throws", e.throw_kit.item);
+        if (e.file_bytes) w.field("bytes", static_cast<long long>(e.file_bytes));
         w.end_object();
     }
     w.end_array();

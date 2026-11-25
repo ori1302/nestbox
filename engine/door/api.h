@@ -42,6 +42,7 @@ struct Settings {
 struct Health {
     std::optional<float> temperature_c;   // the chip's own sensor
     std::optional<int> wifi_dbm;          // the home network's signal
+    size_t flash_total = 0, flash_used = 0;   // the pets' flash in bytes; 0: the platform keeps them elsewhere
 };
 
 struct Device {

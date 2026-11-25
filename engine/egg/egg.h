@@ -154,6 +154,13 @@ struct Pastime {
     std::vector<Fields> steps;
 };
 
+// The first frame of a pet's standing animation, trimmed to what it draws: palette indices, 0 transparent. The
+// device's pages show it, for every pet on the shelf.
+struct Portrait {
+    int w = 0, h = 0;
+    std::vector<uint8_t> px;             // w * h, row by row
+};
+
 // Move-only: its scene and frames point into `bytes`, so a copy would point into the original's buffer.
 struct Egg {
     Egg() = default;
@@ -192,6 +199,8 @@ struct Egg {
     // and described, but it can't be drawn.
     bool slim = false;
     int idle_reach = -1;             // idle_reach(), measured when it is read (-1: not yet); a slim egg keeps it
+    size_t file_bytes = 0;           // the size of the file it was read from; a slim egg keeps it
+    Portrait portrait;               // read with the egg; a slim egg keeps it
 
     const Anim* find(const std::string& n) const {
         for (auto& a : anims) if (a.name == n) return &a;

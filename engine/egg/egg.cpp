@@ -400,6 +400,28 @@ void set_screen_palette(Egg& egg, const std::vector<uint16_t>& colours) {
     for (size_t i = 1; i < egg.palette.size(); i++) egg.palette[i] = egg.screen_lut[rgb444(egg.palette[i])];
 }
 
+namespace {
+
+Portrait portrait_of(const Egg& egg) {
+    Portrait p;
+    const Anim* a = egg.standing_anim();
+    if (!a || a->boxes.empty()) return p;
+    FrameCache cache;
+    const FrameBox& b = pixels_of(a->box(0, 0), cache);
+    int x0 = b.w, y0 = b.h, x1 = -1, y1 = -1;
+    for (int y = 0; y < b.h; y++)
+        for (int x = 0; x < b.w; x++)
+            if (b.px[y * b.w + x]) { x0 = std::min(x0, x); y0 = std::min(y0, y); x1 = std::max(x1, x); y1 = std::max(y1, y); }
+    if (x1 < 0) return p;
+    p.w = x1 - x0 + 1;
+    p.h = y1 - y0 + 1;
+    p.px.reserve(size_t(p.w) * p.h);
+    for (int y = y0; y <= y1; y++) p.px.insert(p.px.end(), b.px + y * b.w + x0, b.px + y * b.w + x1 + 1);
+    return p;
+}
+
+}  // namespace
+
 int idle_reach(const Egg& egg) {
     if (egg.idle_reach >= 0 || egg.slim) return std::max(egg.idle_reach, 0);
     const Anim* a = egg.find("Idle");
@@ -449,6 +471,7 @@ void slim_egg(Egg& egg) {
 bool load_egg(std::vector<uint8_t> bytes, Egg& out, std::string& error) {
     out = Egg{};
     out.bytes = std::move(bytes);
+    out.file_bytes = out.bytes.size();
     const std::vector<uint8_t>& b = out.bytes;
     if (b.size() < HEADER_BYTES ||
         std::memcmp(b.data(), MAGIC, sizeof MAGIC) != 0)
@@ -483,6 +506,7 @@ bool load_egg(std::vector<uint8_t> bytes, Egg& out, std::string& error) {
     }
     if (!out.find("Idle")) return fail(error, "the egg has no Idle animation");
     out.idle_reach = idle_reach(out);          // measured once, here, so bringing the pet out costs nothing more
+    out.portrait = portrait_of(out);
     return read_throw(m, out, error) && read_pastimes(m, out, error);
 }
 

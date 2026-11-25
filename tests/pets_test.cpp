@@ -229,6 +229,21 @@ void kept_slim(const std::vector<uint8_t>& nibble, const std::vector<uint8_t>& g
     check(d.call("GET", "/v1/pets/gander", "", 11 * S).body == gander_said,
           "a slim pet is described exactly as a whole one");
     check(d.call("GET", "/agents", "", 11 * S).body == guide_said, "and the guide says the same");
+    const std::string listed = d.call("GET", "/v1/pets", "", 11 * S).body;
+    check(contains(listed, "\"bytes\": " + std::to_string(gander.size())) &&
+              contains(listed, "\"bytes\": " + std::to_string(nibble.size())) && !contains(listed, "\"storage\""),
+          "GET /v1/pets gives each pet's file size, a slim one's too, and no storage when the platform has none");
+    d.device.health.flash_total = 7 << 20;
+    d.device.health.flash_used = 1 << 20;
+    Fields f;
+    parse_json(d.call("GET", "/v1/pets", "", 11 * S).body, f);
+    check(f.num("storage.total") == double(7 << 20) && f.num("storage.used") == double(1 << 20),
+          "and the pets' flash when it has it");
+    const Response pic = d.call("GET", "/v1/pets/gander/picture", "", 11 * S);
+    check(pic.status == 200 && pic.type == "image/png" && pic.body.rfind("\x89PNG", 0) == 0 &&
+              pic.body == whole.call("GET", "/v1/pets/gander/picture", "", 11 * S).body,
+          "a slim pet's picture is the same PNG as a whole one's");
+    check(d.call("GET", "/v1/pets/fox/picture", "", 11 * S).status == 404, "and a pet that isn't there has none");
 
     Response r = d.call("POST", "/v1", R"({"pet":"gander"})", 12 * S, d.key);
     check(r.status == 200 && loads == 1 && !d.shelf.egg(1).slim && d.shelf.egg(0).slim &&

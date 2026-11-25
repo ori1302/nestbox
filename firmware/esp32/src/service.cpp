@@ -56,7 +56,15 @@ void Upkeep::tick(uint32_t now) {
     follow_relay(&app_);
 }
 
-// The chip's temperature and the Wi-Fi signal, for GET /v1; a hot chip slows the frames until it cools.
+// Keeps the pets' flash for GET /v1/pets: total and used bytes, read before taking the lock (LittleFS walks its
+// blocks to count them).
+static void keep_flash(nestbox::Health& h, size_t total, size_t used) {
+    h.flash_total = total;
+    h.flash_used = used;
+}
+
+// The chip's temperature, the Wi-Fi signal and the pets' flash, for GET /v1 and /v1/pets; a hot chip slows the frames
+// until it cools.
 void Upkeep::check_health(uint32_t now, bool online) {
     if (health_at_ && now - health_at_ < HEALTH_MS) return;
     health_at_ = now;
@@ -69,7 +77,9 @@ void Upkeep::check_health(uint32_t now, bool online) {
         console.printf("health: %.0f C, back to full speed\n", c);
     }
     const int dbm = online ? int(WiFi.RSSI()) : 0;
+    const size_t total = LittleFS.totalBytes(), used = LittleFS.usedBytes();
     app_.with_lock([&](PetCore& core) {
+        keep_flash(core.dev.health, total, used);
         core.dev.health.temperature_c = c;
         if (online) core.dev.health.wifi_dbm = dbm;
         else core.dev.health.wifi_dbm.reset();
@@ -155,6 +165,8 @@ void Upkeep::store_pet_change(uint32_t now) {
     if (kind == Kind::Remove) {
         if (removed && LittleFS.exists(path.c_str()) && !LittleFS.remove(path.c_str()))
             done += " (its file can't be deleted: it is back after a restart)";
+        const size_t total = LittleFS.totalBytes(), used = LittleFS.usedBytes();
+        app_.with_lock([&](PetCore& c) { keep_flash(c.dev.health, total, used); });
         console.printf("pets: %s\n", done.c_str());
         return;
     }
@@ -172,7 +184,9 @@ void Upkeep::store_pet_change(uint32_t now) {
             error = "its file can't be written";
         }
     }
+    const size_t total = LittleFS.totalBytes(), used = LittleFS.usedBytes();
     app_.with_lock([&](PetCore& c) {
+        keep_flash(c.dev.health, total, used);
         nestbox::finish_pet_change(c.dev, error, millis());
         done = c.dev.pet_change_done;
     });

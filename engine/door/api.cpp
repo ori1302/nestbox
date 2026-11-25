@@ -46,6 +46,7 @@ ROUTES
   GET  /v1            what the pet is doing now, and why; the device
   GET  /v1/pets       the pets on this device
   GET  /v1/pets/NAME  one pet: what it can do, its places, its scene
+  GET  /v1/pets/NAME/picture  how it stands, as a PNG
   GET  /v1/words      every word on this page, and the limits, as JSON
   POST /v1/tell       tell the pet something
   POST /v1/user       a computer reports the user's activity      (key)
@@ -740,7 +741,7 @@ Response serve_page(Device& d, const ApiRequest&) {
     r.type = "text/html; charset=utf-8";
     const Egg* pet = d.shelf.pet_out();
     const std::string name = d.setup ? d.setup->name() : pet ? pet->name : d.device_name;
-    r.body = device_page(name, pet_svg(pet), text_svg(name, 3));
+    r.body = device_page(name, text_svg(name, 3));
     return r;
 }
 
@@ -764,6 +765,9 @@ Response serve_pets(Device& d, const ApiRequest& q) {
             w.end_object();
         }
         if (!d.pet_change_done.empty()) w.field("last_change", d.pet_change_done);
+        if (d.health.flash_total)
+            w.key("storage").begin_object().field("total", static_cast<long long>(d.health.flash_total))
+                .field("used", static_cast<long long>(d.health.flash_used)).end_object();
     }));
 }
 
@@ -838,12 +842,23 @@ Response handle_pet_delete(Device& d, const ApiRequest& q, const std::string& id
 }
 
 Response serve_pet(Device& d, const ApiRequest& q) {
-    const std::string name = q.path.substr(std::string(PETS_PATH).size() + 1);
+    std::string name = q.path.substr(std::string(PETS_PATH).size() + 1);
+    const std::string picture = "/picture";
+    const bool wants_picture = name.size() > picture.size() &&
+                               name.compare(name.size() - picture.size(), picture.size(), picture) == 0;
+    if (wants_picture) name.resize(name.size() - picture.size());
     size_t i;
     if (!d.shelf.find(name, i) || name == "next" || name == "previous" || name == "prev") {
         if (d.shelf.rescan) d.shelf.rescan();
         if (!d.shelf.find(name, i) || name == "next" || name == "previous" || name == "prev")
             return error_reply(d, 404, "no pet called \"" + name + "\"; the pets are " + pet_names(d.shelf));
+    }
+    if (wants_picture) {
+        Response r;
+        r.type = "image/png";
+        r.body = pet_png(&d.shelf.egg(i));
+        if (r.body.empty()) return error_reply(d, 404, "\"" + name + "\" has no picture");
+        return r;
     }
     return json_reply(pet_json(d.shelf, i, d.pet.display()));
 }
